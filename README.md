@@ -26,6 +26,12 @@ Connection controls and window closing are blocked while sign-in or conversion i
 
 **Look up** next to Task # reads the ServiceNow task with the service account from Key Vault (read-only) and fills Term User, Delegate, and Retention End Date from the request's catalog variables. The delegate's ServiceNow user is resolved to an email address. Missing values, an unrecognized date, or a request that says email should not be retained produce a warning instead of a guess. Review the fields before processing. Connect Exchange Online (or Graph) first so the Key Vault sign-in uses the right tenant. The variable names are configurable under `Settings.ServiceNow` (`RetentionTermUserVariable`, `RetentionDelegateVariable`, `RetentionEndDateVariable`, `RetentionFlagVariable`).
 
+## Terminations Without Email Retention
+
+Tick **No email retention needed** (Look up ticks it when the request answers "No" to retaining email). The end date becomes tomorrow, which you can override, and the delegate becomes optional; with no delegate, no Full Access is granted. Everything else runs as usual, and the work notes say "no email retention requested".
+
+The AD description keeps the exact `Shared Mailbox - DO NOT DELETE <Task #> - UNTIL <MM/DD/YYYY>` format. The scheduled `TerminateAccounts.ps1` job in the Actions repo finds accounts by that prefix and parses the date after `UNTIL `, so changing the wording would exclude the account from cleanup. That job acts on accounts whose date is before today.
+
 ## Local Verification
 
 ```powershell

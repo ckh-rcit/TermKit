@@ -11,6 +11,8 @@ namespace TermKit.Services
         public string TaskNumber { get; set; } = string.Empty;
         public string TargetUserInput { get; set; } = string.Empty;
         public string DelegateInput { get; set; } = string.Empty;
+        // The termination does not need the mailbox retained; the date is still stamped for the cleanup job and the delegate is optional.
+        public bool NoRetention { get; set; }
         public string RetentionDateText { get; set; } = string.Empty;
     }
 
@@ -68,9 +70,10 @@ namespace TermKit.Services
             var delegateInput = request.DelegateInput.Trim();
             var taskNumber = request.TaskNumber.Trim();
 
-            if (string.IsNullOrWhiteSpace(targetInput) || string.IsNullOrWhiteSpace(delegateInput) || string.IsNullOrWhiteSpace(taskNumber))
+            var hasDelegate = !string.IsNullOrWhiteSpace(delegateInput);
+            if (string.IsNullOrWhiteSpace(targetInput) || string.IsNullOrWhiteSpace(taskNumber) || (!hasDelegate && !request.NoRetention))
             {
-                throw new InvalidOperationException("Task #, Target User, and Delegate are required.");
+                throw new InvalidOperationException(request.NoRetention ? "Task # and Target User are required." : "Task #, Target User, and Delegate are required.");
             }
 
             var targetSam = ToSam(targetInput);
@@ -97,12 +100,12 @@ namespace TermKit.Services
                 targetUpn = adUser.UserPrincipalName;
             }
 
-            var delegateAdUpn = await _ad.GetUserUpnBySamAccountNameAsync(delegateSam, adConfig);
+            var delegateAdUpn = hasDelegate ? await _ad.GetUserUpnBySamAccountNameAsync(delegateSam, adConfig) : null;
             if (!string.IsNullOrWhiteSpace(delegateAdUpn))
             {
                 delegateUpn = delegateAdUpn;
             }
-            else if (!delegateInput.Contains('@'))
+            else if (hasDelegate && !delegateInput.Contains('@'))
             {
                 Logger.Log($"WARNING: Delegate '{delegateSam}' UPN was not found in AD. Falling back to configured domain suffix '{adConfig.DomainDNS}'.", LogType.Warning);
             }
@@ -346,16 +349,23 @@ namespace TermKit.Services
                 Logger.Log($"[Propagation] All {checksPerformed} stability checks passed.", LogType.Success);
             }
 
-            Logger.Log($"[EXO] Checking delegate FullAccess for '{delegateUpn}'...");
-            var hasDelegate = await _exo.HasDirectFullAccessAsync(targetUpn, delegateUpn);
-            if (!hasDelegate)
+            if (hasDelegate)
             {
-                await _exo.AddFullAccessAsync(targetUpn, delegateUpn);
-                Logger.Log($"[EXO] Granted FullAccess to '{delegateUpn}'.", LogType.Success);
+                Logger.Log($"[EXO] Checking delegate FullAccess for '{delegateUpn}'...");
+                var delegateHasAccess = await _exo.HasDirectFullAccessAsync(targetUpn, delegateUpn);
+                if (!delegateHasAccess)
+                {
+                    await _exo.AddFullAccessAsync(targetUpn, delegateUpn);
+                    Logger.Log($"[EXO] Granted FullAccess to '{delegateUpn}'.", LogType.Success);
+                }
+                else
+                {
+                    Logger.Log($"[EXO] Delegate '{delegateUpn}' already has FullAccess.");
+                }
             }
             else
             {
-                Logger.Log($"[EXO] Delegate '{delegateUpn}' already has FullAccess.");
+                Logger.Log("[EXO] No delegate requested. Skipping FullAccess.");
             }
 
             Logger.Log("[Azure AD] Checking for licensing group membership before removal...");
@@ -386,10 +396,12 @@ namespace TermKit.Services
                 "AD Account: Moved, Description/Expiration set.",
                 $"Mailbox: Converted to Shared Mailbox ({targetUpn}).",
                 "AD Hybrid Attributes: Set for stability.",
-                $"Delegation: Full Access granted to '{delegateUpn}'.",
+                hasDelegate ? $"Delegation: Full Access granted to '{delegateUpn}'." : "Delegation: None requested.",
                 "Licensing: Removed.",
                 "Sign-in: Disabled in Azure AD, password reset.",
-                $"Retention set to {request.RetentionDateText.Trim()}."
+                request.NoRetention
+                    ? $"Retention set to {request.RetentionDateText.Trim()} (no email retention requested)."
+                    : $"Retention set to {request.RetentionDateText.Trim()}."
             };
 
             if (oversizedMailboxProceeded)

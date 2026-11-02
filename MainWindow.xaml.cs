@@ -32,6 +32,7 @@ namespace TermKit
         private bool _connectionOperationRunning;
         private string _lastAdAdminUser = string.Empty;
         private UpdateCheckResult? _availableUpdate;
+        private string? _autoNoRetentionDate;
 
         public MainWindow()
         {
@@ -428,6 +429,25 @@ namespace TermKit
             UpdateConnectionStatus();
         }
 
+        private void CheckBoxNoRetention_Changed(object sender, RoutedEventArgs e)
+        {
+            if (TextBoxRetentionEndDate == null || TextBlockRetentionDelegateLabel == null) return;
+
+            if (CheckBoxNoRetention.IsChecked == true)
+            {
+                _autoNoRetentionDate = RetentionRules.NoRetentionEndDate(DateTime.Today).ToString("MM/dd/yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                TextBoxRetentionEndDate.Text = _autoNoRetentionDate;
+                TextBlockRetentionDelegateLabel.Text = "Delegate (optional):";
+            }
+            else
+            {
+                // Only discard the date this checkbox filled in, never one the user typed.
+                if (_autoNoRetentionDate != null && TextBoxRetentionEndDate.Text.Trim() == _autoNoRetentionDate) TextBoxRetentionEndDate.Text = string.Empty;
+                _autoNoRetentionDate = null;
+                TextBlockRetentionDelegateLabel.Text = "Delegate (Sam/UPN):";
+            }
+        }
+
         private async void ButtonRetentionLookup_Click(object sender, RoutedEventArgs e)
             => await RunConnectionOperationAsync(LookUpTaskAsync);
 
@@ -463,9 +483,19 @@ namespace TermKit
             }
 
             var details = result.Details;
+            if (details.RetainEmail == false)
+            {
+                CheckBoxNoRetention.IsChecked = true;
+                Logger.Log("[ServiceNow] The request says email retention is not needed: end date set to tomorrow and the delegate is optional.");
+            }
+            else if (details.RetainEmail == true)
+            {
+                CheckBoxNoRetention.IsChecked = false;
+            }
+
             if (details.TermUser != null) TextBoxRetentionTargetUser.Text = details.TermUser;
             if (details.DelegateUser != null) TextBoxRetentionDelegateUser.Text = details.DelegateUser;
-            if (details.RetentionEndDate != null) TextBoxRetentionEndDate.Text = details.RetentionEndDate.Value.ToString("MM/dd/yyyy", System.Globalization.CultureInfo.InvariantCulture);
+            if (details.RetentionEndDate != null && details.RetainEmail != false) TextBoxRetentionEndDate.Text = details.RetentionEndDate.Value.ToString("MM/dd/yyyy", System.Globalization.CultureInfo.InvariantCulture);
 
             Logger.Log($"[ServiceNow] {details.TicketNumber}: {details.ShortDescription}", LogType.Success);
             Logger.Log($"[ServiceNow] Term user: {details.TermUser ?? "(not found)"}; delegate: {details.DelegateUser ?? "(not found)"}{(string.IsNullOrWhiteSpace(details.DelegateName) ? string.Empty : $" ({details.DelegateName})")}; retention end: {details.RetentionEndDate:MM/dd/yyyy}");
@@ -495,7 +525,8 @@ namespace TermKit
                 TaskNumber = TextBoxRetentionTaskNumber.Text,
                 TargetUserInput = TextBoxRetentionTargetUser.Text,
                 DelegateInput = TextBoxRetentionDelegateUser.Text,
-                RetentionDateText = TextBoxRetentionEndDate.Text
+                RetentionDateText = TextBoxRetentionEndDate.Text,
+                NoRetention = CheckBoxNoRetention.IsChecked == true
             };
 
             _retentionConversionRunning = true;

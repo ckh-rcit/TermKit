@@ -140,6 +140,13 @@ namespace TermKit.Services
                 details.TermUser = string.IsNullOrWhiteSpace(termUser) ? null : termUser;
                 if (details.TermUser == null) details.Warnings.Add($"Term user was not found (variable '{_config.RetentionTermUserVariable}').");
 
+                if (!string.IsNullOrWhiteSpace(retainFlag))
+                {
+                    details.RetainEmail = retainFlag.Equals("yes", StringComparison.OrdinalIgnoreCase) || retainFlag.Equals("true", StringComparison.OrdinalIgnoreCase);
+                }
+                // Without retention the delegate and date are not needed, so their absence is not a problem.
+                var retentionNeeded = details.RetainEmail != false;
+
                 if (!string.IsNullOrWhiteSpace(delegateValue))
                 {
                     if (SysIdPattern.IsMatch(delegateValue))
@@ -157,7 +164,7 @@ namespace TermKit.Services
                         details.DelegateUser = delegateValue;
                     }
                 }
-                else
+                else if (retentionNeeded)
                 {
                     details.Warnings.Add($"Delegate was not found (variable '{_config.RetentionDelegateVariable}').");
                 }
@@ -166,18 +173,12 @@ namespace TermKit.Services
                 {
                     if (DateTime.TryParseExact(endDate, new[] { "yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss", "MM/dd/yyyy" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
                         details.RetentionEndDate = parsed.Date;
-                    else
+                    else if (retentionNeeded)
                         details.Warnings.Add($"Retention end date '{endDate}' is not in a recognized format.");
                 }
-                else
+                else if (retentionNeeded)
                 {
                     details.Warnings.Add($"Retention end date was not found (variable '{_config.RetentionEndDateVariable}').");
-                }
-
-                if (!string.IsNullOrWhiteSpace(retainFlag))
-                {
-                    details.RetainEmail = retainFlag.Equals("yes", StringComparison.OrdinalIgnoreCase) || retainFlag.Equals("true", StringComparison.OrdinalIgnoreCase);
-                    if (details.RetainEmail == false) details.Warnings.Add("The request says the department does NOT want to retain email.");
                 }
 
                 return new ServiceNowLookupResult { Success = true, Message = $"Read '{ticketNumber}' from ServiceNow.", Details = details };

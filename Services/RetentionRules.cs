@@ -33,6 +33,9 @@ namespace TermKit.Services
             return new string(password.ToArray());
         }
 
+        // Existing convention for terminations without retention; the daily cleanup job acts on stamped dates before today.
+        public static DateTime NoRetentionEndDate(DateTime today) => today.Date.AddDays(1);
+
         private static char Pick(string set) => set[RandomNumberGenerator.GetInt32(set.Length)];
 
         private static bool Same(string? left, string? right) =>

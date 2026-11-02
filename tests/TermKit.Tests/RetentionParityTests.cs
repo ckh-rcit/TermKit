@@ -290,7 +290,7 @@ public sealed class RetentionParityTests : IDisposable
     [Fact]
     public async Task TaskLookupKeepsAPlainDelegateAddressAndWarnsAboutGaps()
     {
-        var rows = Rows(Row("v_employee_email", "JDoe@contoso.org"), Row("v_retention_user", "ljames@contoso.org"), Row("v_inbox_deletion_date", "next month"), Row("v_retention", "No"));
+        var rows = Rows(Row("v_employee_email", "JDoe@contoso.org"), Row("v_retention_user", "ljames@contoso.org"), Row("v_inbox_deletion_date", "next month"), Row("v_retention", "Yes"));
         var handler = LookupHandler(rows);
 
         var result = await ServiceNow(handler).LookupTaskAsync("TASK1");
@@ -298,10 +298,29 @@ public sealed class RetentionParityTests : IDisposable
         Assert.True(result.Success, result.Message);
         Assert.Equal("ljames@contoso.org", result.Details!.DelegateUser);
         Assert.Null(result.Details.RetentionEndDate);
-        Assert.False(result.Details.RetainEmail);
-        Assert.Equal(2, result.Details.Warnings.Count);
+        Assert.True(result.Details.RetainEmail);
+        Assert.Single(result.Details.Warnings);
         Assert.DoesNotContain(handler.Requests, request => request.Uri.AbsolutePath.Contains("sys_user"));
     }
+
+    [Fact]
+    public async Task TaskLookupForANoRetentionRequestNeedsNeitherDelegateNorDate()
+    {
+        var rows = Rows(Row("v_employee_email", "JDoe@contoso.org"), Row("v_retention", "No"));
+        var result = await ServiceNow(LookupHandler(rows)).LookupTaskAsync("TASK1");
+
+        Assert.True(result.Success, result.Message);
+        Assert.False(result.Details!.RetainEmail);
+        Assert.Equal("JDoe@contoso.org", result.Details.TermUser);
+        Assert.Null(result.Details.DelegateUser);
+        Assert.Empty(result.Details.Warnings);
+    }
+
+    [Theory]
+    [InlineData("2026-11-02 09:30:00", "2026-11-03")]
+    [InlineData("2026-12-31", "2027-01-01")]
+    public void NoRetentionTerminationsAreStampedForTheNextDay(string today, string expected) =>
+        Assert.Equal(DateTime.Parse(expected), RetentionRules.NoRetentionEndDate(DateTime.Parse(today)));
 
     [Fact]
     public async Task TaskLookupReportsMissingVariablesWithoutInventingValues()

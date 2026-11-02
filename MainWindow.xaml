@@ -95,6 +95,7 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Task # (for Description):" VerticalAlignment="Center" />
@@ -105,11 +106,14 @@
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="Term User (Sam/UPN):" VerticalAlignment="Center" />
                             <TextBox Grid.Row="1" Grid.Column="1" x:Name="TextBoxRetentionTargetUser" PlaceholderText="user@contoso.com" />
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Delegate (Sam/UPN):" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" x:Name="TextBlockRetentionDelegateLabel" Text="Delegate (Sam/UPN):" VerticalAlignment="Center" />
                             <TextBox Grid.Row="2" Grid.Column="1" x:Name="TextBoxRetentionDelegateUser" PlaceholderText="delegate@contoso.com" />
 
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="Retention End Date:" VerticalAlignment="Center" />
                             <TextBox Grid.Row="3" Grid.Column="1" x:Name="TextBoxRetentionEndDate" PlaceholderText="MM/DD/YYYY" />
+                            <CheckBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" x:Name="CheckBoxNoRetention" Content="No email retention needed"
+                                      Checked="CheckBoxNoRetention_Changed" Unchecked="CheckBoxNoRetention_Changed"
+                                      ToolTipService.ToolTip="Uses tomorrow as the end date and makes the delegate optional" />
                         </Grid>
                     </StackPanel>
                 </Border>
