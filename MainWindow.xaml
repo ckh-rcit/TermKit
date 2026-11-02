@@ -58,6 +58,7 @@
                                 <MenuFlyoutItem x:Name="ButtonConnectGraph" Text="Connect Microsoft Graph" Icon="People" Click="ButtonConnectGraph_Click" IsEnabled="False" />
                                 <MenuFlyoutSeparator />
                                 <MenuFlyoutItem x:Name="ButtonDisconnectAd" Text="Disconnect Active Directory" Icon="Remove" Click="ButtonDisconnectAd_Click" IsEnabled="False" />
+                                <MenuFlyoutItem x:Name="ButtonForgetAdCredentials" Text="Forget saved AD credentials" Icon="Delete" Click="ButtonForgetAdCredentials_Click" IsEnabled="False" />
                                 <MenuFlyoutItem x:Name="ButtonDisconnect" Text="Disconnect All" Icon="Cancel" Click="ButtonDisconnect_Click" />
                             </MenuFlyout>
                         </Button.Flyout>

@@ -27,5 +27,6 @@
     <Compile Include="..\..\Services\PermissionVerification.cs" Link="Services\PermissionVerification.cs" />
     <Compile Include="..\..\Services\RetentionRules.cs" Link="Services\RetentionRules.cs" />
     <Compile Include="..\..\Services\UpdateChecker.cs" Link="Services\UpdateChecker.cs" />
+    <Compile Include="..\..\Services\CredentialStore.cs" Link="Services\CredentialStore.cs" />
   </ItemGroup>
 </Project>

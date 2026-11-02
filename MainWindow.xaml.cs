@@ -169,6 +169,7 @@ namespace TermKit
 
             ButtonConnectAd.IsEnabled = !busy && !_adService.IsConnected;
             ButtonDisconnectAd.IsEnabled = !busy && _adService.IsConnected;
+            ButtonForgetAdCredentials.IsEnabled = !busy && HasSavedAdCredentials();
             ButtonConnectExo.IsEnabled = !busy && !_exo.IsConnected;
             ButtonConnectGraph.IsEnabled = !busy && _exo.IsConnected && !_authService.IsGraphConnected;
             ButtonDisconnect.IsEnabled = !busy;
@@ -212,6 +213,28 @@ namespace TermKit
             }
         }
 
+        private string AdCredentialTarget => $"TermKit:AD:{_config.Settings.ActiveDirectory?.DomainNetbios}";
+
+        private bool HasSavedAdCredentials()
+        {
+            try { return CredentialStore.Exists(AdCredentialTarget); }
+            catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        private bool TryReadSavedAdCredentials(out string user, out string password)
+        {
+            try { return CredentialStore.TryRead(AdCredentialTarget, out user, out password); }
+            catch (System.ComponentModel.Win32Exception exception)
+            {
+                Logger.Log($"Could not read the saved AD credentials: {exception.Message}", LogType.Warning);
+                user = password = string.Empty;
+                return false;
+            }
+        }
+
         private async Task ConnectAdAsync()
         {
             var adSettings = _config.Settings.ActiveDirectory;
@@ -221,7 +244,34 @@ namespace TermKit
                 return;
             }
 
-            var credentials = await PromptForAdCredentialsAsync();
+            // One attempt with the saved password per click, never automatically at startup, to avoid account lockouts.
+            string? notice = null;
+            var hadSavedCredentials = false;
+            if (TryReadSavedAdCredentials(out var savedUser, out var savedPassword))
+            {
+                hadSavedCredentials = true;
+                _lastAdAdminUser = savedUser;
+                TextBlockRetentionStatus.Text = "Status: Connecting to AD with saved credentials...";
+                var savedConnected = await _adService.ConnectAsync(savedUser, savedPassword, adSettings);
+                savedPassword = string.Empty;
+                if (savedConnected)
+                {
+                    Logger.Log($"Connected to AD as '{_adService.ConnectedIdentity}' using saved credentials.", LogType.Success);
+                    UpdateConnectionStatus();
+                    return;
+                }
+
+                if (!_adService.LastFailureWasCredentialRejection)
+                {
+                    Logger.Log("Failed to connect to AD with the saved credentials.", LogType.Error);
+                    throw new InvalidOperationException(_adService.LastError ?? "AD connection failed. Verify domain controllers and the RSAT Active Directory tools.");
+                }
+
+                Logger.Log($"Saved AD credentials for '{savedUser}' were rejected.", LogType.Warning);
+                notice = $"The saved credentials for '{savedUser}' were rejected. If your password changed, enter the new one.";
+            }
+
+            var credentials = await PromptForAdCredentialsAsync(notice, hadSavedCredentials);
             if (credentials == null)
             {
                 return;
@@ -232,6 +282,7 @@ namespace TermKit
             if (connected)
             {
                 Logger.Log($"Connected to AD as '{_adService.ConnectedIdentity}'.", LogType.Success);
+                SaveOrForgetAdCredentials(credentials.Value);
             }
             else
             {
@@ -242,14 +293,41 @@ namespace TermKit
             UpdateConnectionStatus();
         }
 
-        private async Task<(string User, string Password)?> PromptForAdCredentialsAsync()
+        private void SaveOrForgetAdCredentials((string User, string Password, bool Remember) credentials)
+        {
+            try
+            {
+                if (credentials.Remember)
+                {
+                    CredentialStore.Write(AdCredentialTarget, credentials.User, credentials.Password);
+                    Logger.Log($"Saved AD credentials for '{credentials.User}' in Windows Credential Manager.");
+                }
+                else if (HasSavedAdCredentials())
+                {
+                    CredentialStore.Delete(AdCredentialTarget);
+                    Logger.Log("Removed the saved AD credentials.");
+                }
+            }
+            catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or ArgumentException)
+            {
+                Logger.Log($"Could not update the saved AD credentials: {exception.Message}", LogType.Warning);
+            }
+        }
+
+        private async Task<(string User, string Password, bool Remember)?> PromptForAdCredentialsAsync(string? notice, bool rememberByDefault)
         {
             var userBox = new TextBox { Header = "Your Admin SamAccountName", Text = _lastAdAdminUser, PlaceholderText = "admin.sam" };
             var passwordBox = new PasswordBox { Header = "Your Admin Password (AD)" };
-            var errorBlock = new TextBlock { Foreground = new SolidColorBrush(Microsoft.UI.Colors.IndianRed), Visibility = Visibility.Collapsed };
+            var rememberBox = new CheckBox { Content = "Remember on this PC (Windows Credential Manager)", IsChecked = rememberByDefault };
+            var errorBlock = new TextBlock { Foreground = new SolidColorBrush(Microsoft.UI.Colors.IndianRed), TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
             var panel = new StackPanel { Spacing = 12, MinWidth = 380 };
+            if (!string.IsNullOrWhiteSpace(notice))
+            {
+                panel.Children.Add(new TextBlock { Text = notice, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Microsoft.UI.Colors.Orange) });
+            }
             panel.Children.Add(userBox);
             panel.Children.Add(passwordBox);
+            panel.Children.Add(rememberBox);
             panel.Children.Add(errorBlock);
 
             var dialog = new ContentDialog
@@ -277,7 +355,21 @@ namespace TermKit
             }
 
             _lastAdAdminUser = userBox.Text.Trim();
-            return (_lastAdAdminUser, passwordBox.Password);
+            return (_lastAdAdminUser, passwordBox.Password, rememberBox.IsChecked == true);
+        }
+
+        private void ButtonForgetAdCredentials_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                CredentialStore.Delete(AdCredentialTarget);
+                Logger.Log("Removed the saved AD credentials.", LogType.Success);
+            }
+            catch (System.ComponentModel.Win32Exception exception)
+            {
+                Logger.Log($"Could not remove the saved AD credentials: {exception.Message}", LogType.Error);
+            }
+            UpdateConnectionStatus();
         }
 
         private void ButtonDisconnectAd_Click(object sender, RoutedEventArgs e)

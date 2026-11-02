@@ -32,10 +32,24 @@ namespace TermKit.Services
         public string? ConnectedIdentity => _connectedIdentity;
         public string? LastError { get; private set; }
 
+        /// <summary>True when the last connect failed because the domain rejected the credentials, not because a controller was unreachable.</summary>
+        public bool LastFailureWasCredentialRejection { get; private set; }
+
+        internal static bool IsCredentialRejection(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return false;
+            foreach (var phrase in new[] { "rejected the client credentials", "logon failure", "password is incorrect", "bad password", "invalid credentials", "account has been locked", "account is locked" })
+            {
+                if (message.Contains(phrase, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
         public async Task<bool> ConnectAsync(string adminSamAccountName, string adminPassword, ActiveDirectoryConfig config)
         {
             Disconnect();
             LastError = null;
+            LastFailureWasCredentialRejection = false;
             if (string.IsNullOrWhiteSpace(adminSamAccountName) || string.IsNullOrWhiteSpace(adminPassword))
             {
                 LastError = "Admin username and password are required.";
@@ -82,6 +96,12 @@ namespace TermKit.Services
                 {
                     failures.Add($"{controller}: {exception.Message}");
                     Logger.Log($"AD connection failed on {controller}: {exception.Message}", LogType.Warning);
+                    if (IsCredentialRejection(exception.Message))
+                    {
+                        // Retrying other controllers with bad credentials only burns lockout attempts.
+                        LastFailureWasCredentialRejection = true;
+                        break;
+                    }
                 }
             }
 
