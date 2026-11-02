@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="TermKit.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="TermKit">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid Padding="16,12,16,12" RequestedTheme="Dark">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="260" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                CornerRadius="6" Padding="12" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="Connection Status:" VerticalAlignment="Center" Opacity="0.75" />
+                    <TextBlock x:Name="TextBlockConnectionStatus" Text="Not connected." VerticalAlignment="Center" Opacity="0.85" />
+                </StackPanel>
+                <Button Grid.Column="1" x:Name="ButtonOpenSettings" Content="Settings" Click="ButtonOpenSettings_Click" />
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Spacing="12">
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="1. Connections" FontWeight="SemiBold" FontSize="15" />
+
+                        <Grid ColumnSpacing="10" RowSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="180" />
+                                <ColumnDefinition Width="300" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Your Admin SamAccountName:" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="TextBoxRetentionAdminUser" PlaceholderText="admin.sam" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Your Admin Password (AD):" VerticalAlignment="Center" />
+                            <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="PasswordBoxRetentionAdminPassword" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="10" RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="140" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <Button Grid.Row="0" Grid.Column="0" x:Name="ButtonConnectAd" Content="Connect AD" Click="ButtonConnectAd_Click" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TextBlockRetentionAdStatus" Text="AD: Not Connected" Foreground="IndianRed" VerticalAlignment="Center" />
+                            <Button Grid.Row="0" Grid.Column="2" x:Name="ButtonDisconnectAd" Content="Disconnect AD" Click="ButtonDisconnectAd_Click" IsEnabled="False" />
+
+                            <Button Grid.Row="1" Grid.Column="0" x:Name="ButtonRetentionConnectGraph" Content="Connect MS Graph" Click="ButtonConnectGraph_Click" IsEnabled="False" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TextBlockRetentionGraphStatus" Text="Graph: Not Connected" Foreground="IndianRed" VerticalAlignment="Center" />
+                            <Button Grid.Row="1" Grid.Column="2" x:Name="ButtonRetentionDisconnectAll" Content="Disconnect All" Click="ButtonDisconnect_Click" />
+
+                            <Button Grid.Row="2" Grid.Column="0" x:Name="ButtonRetentionConnectExo" Content="Connect EXO" Click="ButtonConnectExo_Click" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="TextBlockRetentionExoStatus" Text="EXO: Not Connected" Foreground="IndianRed" VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="2. Target User Details" FontWeight="SemiBold" FontSize="15" />
+                        <Grid ColumnSpacing="10" RowSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="180" />
+                                <ColumnDefinition Width="300" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Task # (for Description):" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="TextBoxRetentionTaskNumber" PlaceholderText="TASK0012345" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Term User (Sam/UPN):" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="TextBoxRetentionTargetUser" PlaceholderText="user@contoso.com" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Delegate (Sam/UPN):" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="2" Grid.Column="1" x:Name="TextBoxRetentionDelegateUser" PlaceholderText="delegate@contoso.com" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Retention End Date:" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="3" Grid.Column="1" x:Name="TextBoxRetentionEndDate" PlaceholderText="MM/DD/YYYY" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="3. Action" FontWeight="SemiBold" FontSize="15" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="ButtonRetentionProcess" Content="Process User Conversion" Style="{StaticResource AccentButtonStyle}" IsEnabled="False" Click="ButtonRetentionProcess_Click" />
+                            <Button x:Name="ButtonRetentionCopySummary" Content="Copy Summary" Click="ButtonRetentionCopySummary_Click" IsEnabled="False" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock x:Name="TextBlockRetentionStatus" Text="Status: Idle" Opacity="0.8" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                <CheckBox x:Name="CheckBoxShowWarnings" Content="Show Warnings" VerticalAlignment="Center" Checked="CheckBoxShowWarnings_Changed" Unchecked="CheckBoxShowWarnings_Changed" />
+            </StackPanel>
+            <Border Grid.Row="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4">
+                <ScrollViewer x:Name="LogScrollViewer" VerticalScrollBarVisibility="Auto" VerticalAlignment="Stretch">
+                    <TextBlock x:Name="TextBlockLog" TextWrapping="Wrap" Padding="8,8,8,20" FontFamily="Consolas" FontSize="12" IsTextSelectionEnabled="True" />
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

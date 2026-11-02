@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute"><_Parameter1>windows</_Parameter1></AssemblyAttribute>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.6" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.89.0" />
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Azure.Security.KeyVault.Secrets" Version="4.11.1" />
+    <Compile Include="..\..\Services\ServiceNowService.cs" Link="Services\ServiceNowService.cs" />
+    <Compile Include="..\..\Services\AuthService.cs" Link="Services\AuthService.cs" />
+    <Compile Include="..\..\Services\ExoPowerShellService.cs" Link="Services\ExoPowerShellService.cs" />
+    <Compile Include="..\..\Services\LoggerPSHost.cs" Link="Services\LoggerPSHost.cs" />
+    <Compile Include="..\..\Services\OnPremAdService.cs" Link="Services\OnPremAdService.cs" />
+    <Compile Include="..\..\Services\ConfigService.cs" Link="Services\ConfigService.cs" />
+    <Compile Include="..\..\Services\PowerShellPrerequisites.cs" Link="Services\PowerShellPrerequisites.cs" />
+    <Compile Include="..\..\Services\PermissionVerification.cs" Link="Services\PermissionVerification.cs" />
+    <Compile Include="..\..\Services\RetentionRules.cs" Link="Services\RetentionRules.cs" />
+  </ItemGroup>
+</Project>

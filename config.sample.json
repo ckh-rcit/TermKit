@@ -1,0 +1,58 @@
+{
+  "Settings": {
+    "ActiveDirectory": {
+      "DomainNetbios": "CONTOSO",
+      "DomainDNS": "contoso.org",
+      "PrimaryDomainController": "dc01.contoso.org",
+      "FallbackDomainControllers": [
+        "dc02.contoso.org"
+      ],
+      "DisabledUsersOU": "OU=Disabled Users,OU=Users,DC=CONTOSO,DC=ORG"
+    },
+    "LicenseGroups": {
+      "M365_G3": {
+        "GroupName": "License_M365_G3",
+        "GroupId": "00000000-0000-0000-0000-000000000001"
+      },
+      "M365_G5": {
+        "GroupName": "License_M365_G5",
+        "GroupId": "00000000-0000-0000-0000-000000000002"
+      },
+      "PrimaryLicenseGroup": "M365_G3",
+      "Bookings": {
+        "GroupName": "License_M365_Bookings"
+      }
+    },
+    "OwaPolicies": {
+      "BookingsCreators": "BookingsCreators"
+    },
+    "GraphApi": {
+      "Scopes": [
+        "Directory.Read.All",
+        "Directory.ReadWrite.All",
+        "Group.Read.All",
+        "Group.ReadWrite.All",
+        "GroupMember.Read.All",
+        "GroupMember.ReadWrite.All",
+        "User.Read.All",
+        "User.ReadWrite.All"
+      ]
+    },
+    "ServiceNow": {
+      "Enabled": false,
+      "InstanceUrl": "https://your-instance.service-now.com/",
+      "KeyVaultUrl": "https://your-keyvault.vault.azure.net/",
+      "SubscriptionId": "00000000-0000-0000-0000-000000000000",
+      "UsernameSecretName": "sn-svc-username",
+      "PasswordSecretName": "sn-svc-password",
+      "Table": "task",
+      "TicketNumberField": "number",
+      "CloseStateField": "state",
+      "CloseStateValue": "3",
+      "WorkNotesField": "work_notes",
+      "AdditionalCommentsField": "comments",
+      "UpdateTable": "",
+      "AdditionalFields": {}
+    }
+  }
+}

@@ -1,0 +1,117 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore dependencies
+        run: dotnet restore "TermKit.csproj"
+
+      - name: Verify release version
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring(1)
+          [xml]$project = Get-Content 'TermKit.csproj' -Raw
+          [xml]$manifest = Get-Content 'Package.appxmanifest' -Raw
+          if ($project.SelectSingleNode('//Version').InnerText -ne $version) { throw 'Assembly version does not match the release tag.' }
+          if ($manifest.SelectSingleNode("/*[local-name()='Package']/*[local-name()='Identity']").Version -ne "$version.0") { throw 'Package version does not match the release tag.' }
+
+      - name: Regression tests
+        run: dotnet test tests/TermKit.Tests/TermKit.Tests.csproj --configuration Release --runtime win-x64
+
+      - name: Create config.json from sample
+        shell: pwsh
+        run: Copy-Item "config.sample.json" "config.json"
+
+      - name: Decode signing certificate
+        shell: pwsh
+        env:
+          PACKAGE_CERTIFICATE_BASE64: ${{ secrets.PACKAGE_CERTIFICATE_BASE64 }}
+        run: |
+          $bytes = [Convert]::FromBase64String($env:PACKAGE_CERTIFICATE_BASE64)
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\TermKitSigning.pfx", $bytes)
+
+      - name: Build signed MSIX package
+        shell: pwsh
+        env:
+          PackageCertificatePassword: ${{ secrets.PACKAGE_CERTIFICATE_PASSWORD }}
+        run: >
+          msbuild "TermKit.csproj"
+          /p:Configuration=Release
+          /p:Platform=x64
+          /p:UapAppxPackageBuildMode=SideloadOnly
+          /p:AppxBundle=Never
+          /p:GenerateAppxPackageOnBuild=true
+          /p:AppxPackageDir="$env:GITHUB_WORKSPACE\publish\msix\"
+          /p:WindowsAppSDKSelfContained=true
+          /p:SelfContained=true
+          /p:PublishReadyToRun=false
+          /p:AppxPackageSigningEnabled=true
+          /p:PackageCertificateKeyFile="$env:RUNNER_TEMP\TermKitSigning.pfx"
+
+      - name: Export public certificate
+        shell: pwsh
+        env:
+          PACKAGE_CERTIFICATE_PASSWORD: ${{ secrets.PACKAGE_CERTIFICATE_PASSWORD }}
+        run: |
+          $securePassword = ConvertTo-SecureString -String $env:PACKAGE_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Get-PfxCertificate -FilePath "$env:RUNNER_TEMP\TermKitSigning.pfx" -Password $securePassword
+          Export-Certificate -Cert $cert -FilePath "$env:RUNNER_TEMP\TermKitSigning.cer" | Out-Null
+
+      - name: Remove signing certificate
+        if: always()
+        shell: pwsh
+        run: Remove-Item "$env:RUNNER_TEMP\TermKitSigning.pfx" -ErrorAction SilentlyContinue
+
+      - name: Rename release artifacts
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $msix = Get-ChildItem -Path "publish/msix" -Recurse -Filter "*.msix" | Select-Object -First 1
+          if (-not $msix) { throw 'MSIX package was not produced.' }
+          $package = [IO.Compression.ZipFile]::OpenRead($msix.FullName)
+          try {
+            foreach ($path in @('AppxSignature.p7x', 'Modules/Microsoft.PowerShell.Management/Microsoft.PowerShell.Management.psd1', 'Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1', 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1')) {
+              if (-not $package.GetEntry($path)) { throw "Required package file missing: $path" }
+            }
+          } finally { $package.Dispose() }
+          Copy-Item $msix.FullName -Destination "TermKit-$version-x64.msix"
+
+      - name: Package certificate trust bundle
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $bundleDir = "publish/trust-bundle"
+          New-Item -ItemType Directory -Path $bundleDir -Force | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\TermKitSigning.cer" -Destination "$bundleDir\TermKit-Signing-Certificate.cer"
+          Copy-Item "scripts\Import-SigningCert.ps1" -Destination "$bundleDir\Import-SigningCert.ps1"
+          Compress-Archive -Path "$bundleDir\*" -DestinationPath "TermKit-Trust-Bundle-$version.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            TermKit-*.msix
+            TermKit-Trust-Bundle-*.zip
+          generate_release_notes: true
+

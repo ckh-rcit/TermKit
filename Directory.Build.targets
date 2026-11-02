@@ -1,0 +1,8 @@
+<Project>
+  <ItemGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <Content Include="$(NuGetPackageRoot)microsoft.powershell.sdk\7.6.6\contentFiles\any\any\runtimes\win\lib\net10.0\Modules\**\*"
+             Link="Modules\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

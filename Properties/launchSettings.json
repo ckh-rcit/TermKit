@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "TermKit (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "TermKit (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
