@@ -5,7 +5,7 @@
 
 .DESCRIPTION
 	Run this ONCE to create the signing certificate used by the GitHub Actions release workflow.
-	The certificate Subject must match the Publisher value in Package.appxmanifest (CN=A253761).
+	The certificate Subject must match the Publisher value in Package.appxmanifest (CN=CKH-RCIT).
 
 	After running this script:
 	  1. Copy the contents of "signing-cert-base64.txt" and save it as a GitHub Actions secret
@@ -22,7 +22,7 @@
 #>
 
 param(
-	[string]$Subject = "CN=A253761",
+	[string]$Subject = "CN=CKH-RCIT",
 	[string]$OutputDirectory = "$PSScriptRoot\..\signing",
 	[SecureString]$Password
 )

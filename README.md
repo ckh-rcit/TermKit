@@ -40,7 +40,7 @@ The packaged app seeds `%LOCALAPPDATA%\TermKit\config.json` from `config.sample.
 
 - `Validate` runs the test suite on every push and pull request to `main`.
 - Pushing a `vMajor.Minor.Build` tag runs `Build and Release`: it checks the tag against the `Version` in `TermKit.csproj` and `Package.appxmanifest`, runs the tests, builds a signed x64 MSIX, verifies the bundled PowerShell core modules, and publishes the MSIX with a certificate trust bundle.
-- The repository needs the `PACKAGE_CERTIFICATE_BASE64` and `PACKAGE_CERTIFICATE_PASSWORD` secrets. The certificate subject must match the manifest publisher (`CN=A253761`).
+- The repository needs the `PACKAGE_CERTIFICATE_BASE64` and `PACKAGE_CERTIFICATE_PASSWORD` secrets. The certificate subject must match the manifest publisher (`CN=CKH-RCIT`, the same certificate EXOKit uses, so machines that already trust EXOKit trust TermKit).
 - Bump both version fields before tagging.
 
 References: [EXO prerequisites](https://learn.microsoft.com/powershell/exchange/exchange-online-powershell-v2), [WAM compatibility](https://learn.microsoft.com/troubleshoot/exchange/administration/wam-integration-issues), [MSAL browser configuration](https://learn.microsoft.com/entra/msal/dotnet/acquiring-tokens/using-web-browsers), [Azure credential reuse](https://learn.microsoft.com/dotnet/azure/sdk/authentication/best-practices#reuse-credential-instances).
