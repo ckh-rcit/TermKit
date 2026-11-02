@@ -120,6 +120,19 @@ namespace TermKit.Services
 
         [JsonPropertyName("AdditionalFields")]
         public Dictionary<string, object>? AdditionalFields { get; set; }
+
+        // Catalog variable names read from the task's requested item to pre-fill the retention form.
+        [JsonPropertyName("RetentionTermUserVariable")]
+        public string RetentionTermUserVariable { get; set; } = "v_employee_email";
+
+        [JsonPropertyName("RetentionDelegateVariable")]
+        public string RetentionDelegateVariable { get; set; } = "v_retention_user";
+
+        [JsonPropertyName("RetentionEndDateVariable")]
+        public string RetentionEndDateVariable { get; set; } = "v_inbox_deletion_date";
+
+        [JsonPropertyName("RetentionFlagVariable")]
+        public string RetentionFlagVariable { get; set; } = "v_retention";
     }
 
     public class SettingsConfig

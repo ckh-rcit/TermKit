@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
@@ -13,6 +16,25 @@ namespace TermKit.Services
     {
         public bool Success { get; set; }
         public string Message { get; set; } = string.Empty;
+    }
+
+    public sealed class ServiceNowTaskDetails
+    {
+        public string TicketNumber { get; set; } = string.Empty;
+        public string ShortDescription { get; set; } = string.Empty;
+        public string? TermUser { get; set; }
+        public string? DelegateUser { get; set; }
+        public string? DelegateName { get; set; }
+        public DateTime? RetentionEndDate { get; set; }
+        public bool? RetainEmail { get; set; }
+        public List<string> Warnings { get; } = new();
+    }
+
+    public sealed class ServiceNowLookupResult
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public ServiceNowTaskDetails? Details { get; set; }
     }
 
     /// <summary>
@@ -43,6 +65,137 @@ namespace TermKit.Services
             _httpClient = client;
             _readSecret = readSecret;
             _tenantIdProvider = () => null;
+        }
+
+        private static readonly Regex TicketPattern = new(@"\A[A-Za-z0-9_-]{1,64}\z", RegexOptions.Compiled);
+        private static readonly Regex IdentifierPattern = new(@"\A[A-Za-z_][A-Za-z0-9_]*\z", RegexOptions.Compiled);
+        private static readonly Regex SysIdPattern = new(@"\A[a-fA-F0-9]{32}\z", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Reads the task's requested-item catalog variables with the service account and maps them to the
+        /// retention form fields. Read-only: nothing in ServiceNow is changed.
+        /// </summary>
+        public async Task<ServiceNowLookupResult> LookupTaskAsync(string ticketNumber)
+        {
+            static ServiceNowLookupResult Fail(string message) => new() { Success = false, Message = message };
+
+            if (!_config.Enabled) return Fail("ServiceNow integration is not enabled in config.");
+            if (string.IsNullOrWhiteSpace(_config.InstanceUrl) || string.IsNullOrWhiteSpace(_config.KeyVaultUrl) ||
+                string.IsNullOrWhiteSpace(_config.UsernameSecretName) || string.IsNullOrWhiteSpace(_config.PasswordSecretName))
+                return Fail("ServiceNow config field is missing or empty.");
+            ticketNumber = (ticketNumber ?? string.Empty).Trim();
+            if (!TicketPattern.IsMatch(ticketNumber)) return Fail("Task/ticket number must contain only letters, digits, '-' or '_'.");
+
+            string credentials;
+            try
+            {
+                var snUser = await GetKeyVaultSecretAsync(_config.KeyVaultUrl, _config.UsernameSecretName);
+                var snPass = await GetKeyVaultSecretAsync(_config.KeyVaultUrl, _config.PasswordSecretName);
+                credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{snUser}:{snPass}"));
+            }
+            catch (Exception ex)
+            {
+                return Fail($"Failed to retrieve ServiceNow credentials from Key Vault: {ex.Message}");
+            }
+
+            var instanceUrl = _config.InstanceUrl.TrimEnd('/');
+            var table = string.IsNullOrWhiteSpace(_config.Table) ? "task" : _config.Table;
+            var numField = string.IsNullOrWhiteSpace(_config.TicketNumberField) ? "number" : _config.TicketNumberField;
+
+            try
+            {
+                var query = Uri.EscapeDataString($"{numField}={ticketNumber}");
+                using var head = await GetJsonAsync($"{instanceUrl}/api/now/table/{table}?sysparm_query={query}&sysparm_fields=sys_id,sys_class_name&sysparm_limit=1", credentials);
+                if (!head.RootElement.TryGetProperty("result", out var found) || found.GetArrayLength() == 0)
+                    return Fail($"ServiceNow ticket '{ticketNumber}' not found in table '{table}'.");
+                var sysId = GetFieldValue(found[0], "sys_id");
+                var sysClass = GetFieldValue(found[0], "sys_class_name");
+                if (!SysIdPattern.IsMatch(sysId) || !IdentifierPattern.IsMatch(sysClass))
+                    return Fail($"ServiceNow ticket '{ticketNumber}' did not return a usable record.");
+
+                using var task = await GetJsonAsync($"{instanceUrl}/api/now/table/{sysClass}/{sysId}?sysparm_fields=number,short_description,request_item", credentials);
+                var taskRecord = task.RootElement.GetProperty("result");
+                var requestItem = GetFieldValue(taskRecord, "request_item");
+                if (!SysIdPattern.IsMatch(requestItem))
+                    return Fail($"'{ticketNumber}' has no requested item, so there are no catalog variables to read.");
+
+                var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var variableQuery = Uri.EscapeDataString($"request_item={requestItem}");
+                using (var rows = await GetJsonAsync($"{instanceUrl}/api/now/table/sc_item_option_mtom?sysparm_query={variableQuery}&sysparm_fields=sc_item_option.item_option_new.name,sc_item_option.value&sysparm_limit=1000", credentials))
+                {
+                    foreach (var row in rows.RootElement.GetProperty("result").EnumerateArray())
+                    {
+                        var name = GetFieldValue(row, "sc_item_option.item_option_new.name");
+                        var value = GetFieldValue(row, "sc_item_option.value");
+                        if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(value) && !variables.ContainsKey(name)) variables[name] = value.Trim();
+                    }
+                }
+
+                var details = new ServiceNowTaskDetails { TicketNumber = ticketNumber, ShortDescription = GetFieldValue(taskRecord, "short_description") };
+                variables.TryGetValue(_config.RetentionTermUserVariable, out var termUser);
+                variables.TryGetValue(_config.RetentionDelegateVariable, out var delegateValue);
+                variables.TryGetValue(_config.RetentionEndDateVariable, out var endDate);
+                variables.TryGetValue(_config.RetentionFlagVariable, out var retainFlag);
+
+                details.TermUser = string.IsNullOrWhiteSpace(termUser) ? null : termUser;
+                if (details.TermUser == null) details.Warnings.Add($"Term user was not found (variable '{_config.RetentionTermUserVariable}').");
+
+                if (!string.IsNullOrWhiteSpace(delegateValue))
+                {
+                    if (SysIdPattern.IsMatch(delegateValue))
+                    {
+                        using var user = await GetJsonAsync($"{instanceUrl}/api/now/table/sys_user/{delegateValue}?sysparm_fields=email,user_name,name", credentials);
+                        var userRecord = user.RootElement.GetProperty("result");
+                        var email = GetFieldValue(userRecord, "email");
+                        var userName = GetFieldValue(userRecord, "user_name");
+                        details.DelegateUser = !string.IsNullOrWhiteSpace(email) ? email : (!string.IsNullOrWhiteSpace(userName) ? userName : null);
+                        details.DelegateName = GetFieldValue(userRecord, "name");
+                        if (details.DelegateUser == null) details.Warnings.Add("The delegate's ServiceNow user has no email or user name.");
+                    }
+                    else
+                    {
+                        details.DelegateUser = delegateValue;
+                    }
+                }
+                else
+                {
+                    details.Warnings.Add($"Delegate was not found (variable '{_config.RetentionDelegateVariable}').");
+                }
+
+                if (!string.IsNullOrWhiteSpace(endDate))
+                {
+                    if (DateTime.TryParseExact(endDate, new[] { "yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss", "MM/dd/yyyy" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                        details.RetentionEndDate = parsed.Date;
+                    else
+                        details.Warnings.Add($"Retention end date '{endDate}' is not in a recognized format.");
+                }
+                else
+                {
+                    details.Warnings.Add($"Retention end date was not found (variable '{_config.RetentionEndDateVariable}').");
+                }
+
+                if (!string.IsNullOrWhiteSpace(retainFlag))
+                {
+                    details.RetainEmail = retainFlag.Equals("yes", StringComparison.OrdinalIgnoreCase) || retainFlag.Equals("true", StringComparison.OrdinalIgnoreCase);
+                    if (details.RetainEmail == false) details.Warnings.Add("The request says the department does NOT want to retain email.");
+                }
+
+                return new ServiceNowLookupResult { Success = true, Message = $"Read '{ticketNumber}' from ServiceNow.", Details = details };
+            }
+            catch (Exception ex)
+            {
+                return Fail($"Failed to read ServiceNow ticket '{ticketNumber}': {ex.Message}");
+            }
+        }
+
+        private async Task<JsonDocument> GetJsonAsync(string url, string credentials)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var response = await _httpClient.SendAsync(request);
+            await EnsureSuccessAsync(response);
+            return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         }
 
         internal static InteractiveBrowserCredentialOptions CreateCredentialOptions(string? tenantId)

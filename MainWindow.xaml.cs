@@ -42,7 +42,7 @@ namespace TermKit
             _config = ConfigService.Load();
             _authService = new AuthService(_config.Settings.GraphApi.Scopes.ToArray(), GetWindowHandle);
             _graphService = new GraphService(_authService, _config.Settings.GraphApi.Scopes.ToArray());
-            _serviceNowService = _config.Settings.ServiceNow != null ? new ServiceNowService(_config.Settings.ServiceNow, () => _authService.ConnectedTenantId) : null;
+            _serviceNowService = _config.Settings.ServiceNow != null ? new ServiceNowService(_config.Settings.ServiceNow, GetTenantId) : null;
 
             Logger.LogEntryWritten += OnLogEntryWritten;
             Closed += async (_, _) =>
@@ -59,6 +59,9 @@ namespace TermKit
         }
 
         private IntPtr GetWindowHandle() => WindowNative.GetWindowHandle(this);
+
+        // Key Vault sign-in is scoped to the tenant; EXO connects first, so it can supply it before Graph.
+        private string? GetTenantId() => _authService.ConnectedTenantId ?? _exo.ConnectedTenantId;
 
         private void ApplyDarkTitleBar()
         {
@@ -99,6 +102,7 @@ namespace TermKit
             ButtonConnectGraph.IsEnabled = !busy && _exo.IsConnected && !_authService.IsGraphConnected;
             ButtonDisconnect.IsEnabled = !busy;
             ButtonOpenSettings.IsEnabled = !busy;
+            ButtonRetentionLookup.IsEnabled = !busy && _config.Settings.ServiceNow?.Enabled == true;
 
             var canRunRetention = _adService.IsConnected && _exo.IsConnected && _authService.IsGraphConnected && !busy;
             ButtonRetentionProcess.IsEnabled = canRunRetention;
@@ -260,6 +264,55 @@ namespace TermKit
             UpdateConnectionStatus();
         }
 
+        private async void ButtonRetentionLookup_Click(object sender, RoutedEventArgs e)
+            => await RunConnectionOperationAsync(LookUpTaskAsync);
+
+        private async Task LookUpTaskAsync()
+        {
+            var ticket = TextBoxRetentionTaskNumber.Text.Trim();
+            if (string.IsNullOrWhiteSpace(ticket))
+            {
+                await ShowMessageAsync("Enter a Task # first.", "Task Lookup");
+                return;
+            }
+
+            if (_serviceNowService == null || _config.Settings.ServiceNow?.Enabled != true)
+            {
+                await ShowMessageAsync("ServiceNow integration is disabled. Enable it in Settings.", "Task Lookup");
+                return;
+            }
+
+            if (!Guid.TryParse(GetTenantId(), out _))
+            {
+                await ShowMessageAsync("Connect Exchange Online (or Microsoft Graph) first so the Key Vault sign-in uses the right tenant.", "Task Lookup");
+                return;
+            }
+
+            TextBlockRetentionStatus.Text = $"Status: Reading {ticket} from ServiceNow...";
+            Logger.Log($"[ServiceNow] Reading '{ticket}' with the service account...");
+            var result = await _serviceNowService.LookupTaskAsync(ticket);
+            if (!result.Success || result.Details == null)
+            {
+                Logger.Log($"[ServiceNow] {result.Message}", LogType.Error);
+                await ShowMessageAsync(result.Message, "Task Lookup Failed");
+                return;
+            }
+
+            var details = result.Details;
+            if (details.TermUser != null) TextBoxRetentionTargetUser.Text = details.TermUser;
+            if (details.DelegateUser != null) TextBoxRetentionDelegateUser.Text = details.DelegateUser;
+            if (details.RetentionEndDate != null) TextBoxRetentionEndDate.Text = details.RetentionEndDate.Value.ToString("MM/dd/yyyy", System.Globalization.CultureInfo.InvariantCulture);
+
+            Logger.Log($"[ServiceNow] {details.TicketNumber}: {details.ShortDescription}", LogType.Success);
+            Logger.Log($"[ServiceNow] Term user: {details.TermUser ?? "(not found)"}; delegate: {details.DelegateUser ?? "(not found)"}{(string.IsNullOrWhiteSpace(details.DelegateName) ? string.Empty : $" ({details.DelegateName})")}; retention end: {details.RetentionEndDate:MM/dd/yyyy}");
+            foreach (var warning in details.Warnings) Logger.Log($"[ServiceNow] {warning}", LogType.Warning);
+
+            if (details.Warnings.Count > 0)
+            {
+                await ShowMessageAsync(string.Join(Environment.NewLine, details.Warnings) + Environment.NewLine + Environment.NewLine + "Review and complete the fields before processing.", "Task Lookup: Review Needed");
+            }
+        }
+
         private async void ButtonRetentionProcess_Click(object sender, RoutedEventArgs e)
         {
             if (_retentionConversionRunning || _connectionOperationRunning)
@@ -406,7 +459,7 @@ namespace TermKit
                 testButton.IsEnabled = false;
                 try
                 {
-                    var tester = new ServiceNowService(tempConfig, () => _authService.ConnectedTenantId);
+                    var tester = new ServiceNowService(tempConfig, GetTenantId);
                     var result = await tester.TestConnectionAsync();
                     statusBlock.Text = result.Message;
                 }
@@ -490,7 +543,7 @@ namespace TermKit
             try
             {
                 ConfigService.Save(_config);
-                _serviceNowService = new ServiceNowService(serviceNow, () => _authService.ConnectedTenantId);
+                _serviceNowService = new ServiceNowService(serviceNow, GetTenantId);
                 Logger.Log("ServiceNow settings saved.", LogType.Success);
             }
             catch (Exception ex)

@@ -233,4 +233,116 @@ public sealed class RetentionParityTests : IDisposable
         Assert.False(result.Success);
         Assert.Empty(handler.Requests);
     }
+
+    private const string TaskId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private const string RitmId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    private const string UserId = "cccccccccccccccccccccccccccccccc";
+
+    private static StubHandler LookupHandler(string variableRows, string userJson = """{"result":{"email":"LJames@contoso.org","user_name":"ljames","name":"Leroyna James"}}""", string taskJson = "") =>
+        new((request, _) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/api/now/table/task") return Json(HttpStatusCode.OK, "{\"result\":[{\"sys_id\":\"" + TaskId + "\",\"sys_class_name\":\"sc_task\"}]}");
+            if (path == $"/api/now/table/sc_task/{TaskId}")
+                return Json(HttpStatusCode.OK, taskJson.Length > 0 ? taskJson : "{\"result\":{\"number\":\"TASK1\",\"short_description\":\"Termination: Retain Email - Jane Doe\",\"request_item\":{\"link\":\"x\",\"value\":\"" + RitmId + "\"}}}");
+            if (path == "/api/now/table/sc_item_option_mtom") return Json(HttpStatusCode.OK, variableRows);
+            if (path == $"/api/now/table/sys_user/{UserId}") return Json(HttpStatusCode.OK, userJson);
+            return Json(HttpStatusCode.NotFound, """{"error":{"message":"unexpected"}}""");
+        });
+
+    private static string Row(string name, string value) => JsonSerializer.Serialize(new Dictionary<string, string>
+    {
+        ["sc_item_option.item_option_new.name"] = name,
+        ["sc_item_option.value"] = value
+    });
+
+    // display_value=all returns each field as {display_value, value}.
+    private static string ObjectRow(string name, string value) => JsonSerializer.Serialize(new Dictionary<string, object>
+    {
+        ["sc_item_option.item_option_new.name"] = new { display_value = name, value = name },
+        ["sc_item_option.value"] = new { display_value = value, value }
+    });
+
+    private static string Rows(params string[] rows) => "{\"result\":[" + string.Join(",", rows) + "]}";
+
+    [Fact]
+    public async Task TaskLookupMapsCatalogVariablesToTheRetentionFields()
+    {
+        var rows = Rows(Row("v_employee_email", "JDoe@contoso.org"), ObjectRow("v_retention_user", UserId), Row("v_inbox_deletion_date", "2026-11-30"), Row("v_retention", "Yes"), Row("v_unrelated", "x"));
+        var handler = LookupHandler(rows);
+
+        var result = await ServiceNow(handler).LookupTaskAsync(" TASK1 ");
+
+        Assert.True(result.Success, result.Message);
+        var details = result.Details!;
+        Assert.Equal("JDoe@contoso.org", details.TermUser);
+        Assert.Equal("LJames@contoso.org", details.DelegateUser);
+        Assert.Equal("Leroyna James", details.DelegateName);
+        Assert.Equal(new DateTime(2026, 11, 30), details.RetentionEndDate);
+        Assert.True(details.RetainEmail);
+        Assert.Equal("Termination: Retain Email - Jane Doe", details.ShortDescription);
+        Assert.Empty(details.Warnings);
+        Assert.All(handler.Requests, request => Assert.Equal(HttpMethod.Get, request.Method));
+        Assert.Contains("number%3DTASK1", handler.Requests[0].Uri.Query);
+        Assert.Contains($"request_item%3D{RitmId}", handler.Requests[2].Uri.Query);
+    }
+
+    [Fact]
+    public async Task TaskLookupKeepsAPlainDelegateAddressAndWarnsAboutGaps()
+    {
+        var rows = Rows(Row("v_employee_email", "JDoe@contoso.org"), Row("v_retention_user", "ljames@contoso.org"), Row("v_inbox_deletion_date", "next month"), Row("v_retention", "No"));
+        var handler = LookupHandler(rows);
+
+        var result = await ServiceNow(handler).LookupTaskAsync("TASK1");
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal("ljames@contoso.org", result.Details!.DelegateUser);
+        Assert.Null(result.Details.RetentionEndDate);
+        Assert.False(result.Details.RetainEmail);
+        Assert.Equal(2, result.Details.Warnings.Count);
+        Assert.DoesNotContain(handler.Requests, request => request.Uri.AbsolutePath.Contains("sys_user"));
+    }
+
+    [Fact]
+    public async Task TaskLookupReportsMissingVariablesWithoutInventingValues()
+    {
+        var handler = LookupHandler("""{"result":[]}""");
+        var result = await ServiceNow(handler).LookupTaskAsync("TASK1");
+        Assert.True(result.Success, result.Message);
+        Assert.Null(result.Details!.TermUser);
+        Assert.Null(result.Details.DelegateUser);
+        Assert.Null(result.Details.RetentionEndDate);
+        Assert.Equal(3, result.Details.Warnings.Count);
+    }
+
+    [Fact]
+    public async Task TaskLookupHonorsConfiguredVariableNames()
+    {
+        var rows = Rows(Row("custom_user", "JDoe@contoso.org"));
+        var config = new ServiceNowConfig
+        {
+            Enabled = true, InstanceUrl = "https://example.service-now.com/", KeyVaultUrl = "https://vault.vault.azure.net/",
+            UsernameSecretName = "u", PasswordSecretName = "p", RetentionTermUserVariable = "custom_user"
+        };
+        var result = await ServiceNow(LookupHandler(rows), config).LookupTaskAsync("TASK1");
+        Assert.Equal("JDoe@contoso.org", result.Details!.TermUser);
+    }
+
+    [Fact]
+    public async Task TaskLookupFailsWhenTheTaskHasNoRequestedItem()
+    {
+        var handler = LookupHandler("""{"result":[]}""", taskJson: """{"result":{"number":"TASK1","short_description":"x","request_item":""}}""");
+        var result = await ServiceNow(handler).LookupTaskAsync("TASK1");
+        Assert.False(result.Success);
+        Assert.Contains("no requested item", result.Message);
+    }
+
+    [Fact]
+    public async Task TaskLookupRejectsUnsafeTicketNumbersAndSendsNothing()
+    {
+        var handler = LookupHandler("""{"result":[]}""");
+        var result = await ServiceNow(handler).LookupTaskAsync("TASK1^ORnumber=TASK2");
+        Assert.False(result.Success);
+        Assert.Empty(handler.Requests);
+    }
 }

@@ -52,6 +52,10 @@
       "WorkNotesField": "work_notes",
       "AdditionalCommentsField": "comments",
       "UpdateTable": "",
+      "RetentionTermUserVariable": "v_employee_email",
+      "RetentionDelegateVariable": "v_retention_user",
+      "RetentionEndDateVariable": "v_inbox_deletion_date",
+      "RetentionFlagVariable": "v_retention",
       "AdditionalFields": {}
     }
   }

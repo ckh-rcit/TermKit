@@ -89,6 +89,8 @@
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Task # (for Description):" VerticalAlignment="Center" />
                             <TextBox Grid.Row="0" Grid.Column="1" x:Name="TextBoxRetentionTaskNumber" PlaceholderText="TASK0012345" />
+                            <Button Grid.Row="0" Grid.Column="2" x:Name="ButtonRetentionLookup" Content="Look up" Click="ButtonRetentionLookup_Click"
+                                    ToolTipService.ToolTip="Fill the fields below from the ServiceNow task using the service account" />
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="Term User (Sam/UPN):" VerticalAlignment="Center" />
                             <TextBox Grid.Row="1" Grid.Column="1" x:Name="TextBoxRetentionTargetUser" PlaceholderText="user@contoso.com" />

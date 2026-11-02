@@ -21,6 +21,10 @@ Connection and conversion failures display the underlying error. Managed startup
 
 Connection controls and window closing are blocked while sign-in or conversion is running. EXO permission reads and writes use bounded retry-and-verify for the known server null-reference bug. Failed mailbox reads remain errors, and an unreadable mailbox size stops conversion instead of being treated as zero.
 
+## Task Lookup
+
+**Look up** next to Task # reads the ServiceNow task with the service account from Key Vault (read-only) and fills Term User, Delegate, and Retention End Date from the request's catalog variables. The delegate's ServiceNow user is resolved to an email address. Missing values, an unrecognized date, or a request that says email should not be retained produce a warning instead of a guess. Review the fields before processing. Connect Exchange Online (or Graph) first so the Key Vault sign-in uses the right tenant. The variable names are configurable under `Settings.ServiceNow` (`RetentionTermUserVariable`, `RetentionDelegateVariable`, `RetentionEndDateVariable`, `RetentionFlagVariable`).
+
 ## Local Verification
 
 ```powershell
