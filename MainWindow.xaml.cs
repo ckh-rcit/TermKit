@@ -10,6 +10,7 @@ using Microsoft.UI.Windowing;
 using TermKit.Services;
 using Windows.ApplicationModel.DataTransfer;
 using WinRT.Interop;
+using Ellipse = Microsoft.UI.Xaml.Shapes.Ellipse;
 
 namespace TermKit
 {
@@ -29,6 +30,7 @@ namespace TermKit
         private bool _retentionConversionRunning;
         private string _retentionSummaryText = string.Empty;
         private bool _connectionOperationRunning;
+        private string _lastAdAdminUser = string.Empty;
 
         public MainWindow()
         {
@@ -87,23 +89,15 @@ namespace TermKit
             var exoStatus = _exo.IsConnected ? $"EXO: {_exo.ConnectedUserPrincipalName}" : "EXO: Not connected";
             var graphStatus = _authService.IsGraphConnected ? $"Graph: {_authService.ConnectedUser}" : "Graph: Not connected";
 
-            TextBlockConnectionStatus.Text = $"{adStatus} | {exoStatus} | {graphStatus}";
+            SetConnectionIndicator(AdConnectionStatus, AdOnlineIndicator, AdOfflineIndicator, TextBlockAdStatus, "AD", _adService.IsConnected, adStatus);
+            SetConnectionIndicator(ExoConnectionStatus, ExoOnlineIndicator, ExoOfflineIndicator, TextBlockExoStatus, "EXO", _exo.IsConnected, exoStatus);
+            SetConnectionIndicator(GraphConnectionStatus, GraphOnlineIndicator, GraphOfflineIndicator, TextBlockGraphStatus, "Graph", _authService.IsGraphConnected, graphStatus);
 
-            TextBlockRetentionAdStatus.Text = adStatus;
-            TextBlockRetentionAdStatus.Foreground = new SolidColorBrush(_adService.IsConnected ? Microsoft.UI.Colors.LightGreen : Microsoft.UI.Colors.IndianRed);
             ButtonConnectAd.IsEnabled = !busy && !_adService.IsConnected;
             ButtonDisconnectAd.IsEnabled = !busy && _adService.IsConnected;
-            TextBoxRetentionAdminUser.IsReadOnly = _adService.IsConnected;
-            PasswordBoxRetentionAdminPassword.IsEnabled = !_adService.IsConnected;
-
-            TextBlockRetentionExoStatus.Text = exoStatus;
-            TextBlockRetentionExoStatus.Foreground = new SolidColorBrush(_exo.IsConnected ? Microsoft.UI.Colors.LightGreen : Microsoft.UI.Colors.IndianRed);
-            ButtonRetentionConnectExo.IsEnabled = !busy && !_exo.IsConnected;
-
-            TextBlockRetentionGraphStatus.Text = graphStatus;
-            TextBlockRetentionGraphStatus.Foreground = new SolidColorBrush(_authService.IsGraphConnected ? Microsoft.UI.Colors.LightGreen : Microsoft.UI.Colors.IndianRed);
-            ButtonRetentionConnectGraph.IsEnabled = !busy && _exo.IsConnected && !_authService.IsGraphConnected;
-            ButtonRetentionDisconnectAll.IsEnabled = !busy;
+            ButtonConnectExo.IsEnabled = !busy && !_exo.IsConnected;
+            ButtonConnectGraph.IsEnabled = !busy && _exo.IsConnected && !_authService.IsGraphConnected;
+            ButtonDisconnect.IsEnabled = !busy;
             ButtonOpenSettings.IsEnabled = !busy;
 
             var canRunRetention = _adService.IsConnected && _exo.IsConnected && _authService.IsGraphConnected && !busy;
@@ -114,6 +108,15 @@ namespace TermKit
                 : canRunRetention
                     ? "Status: Ready. All required services are connected."
                     : "Status: Connect AD, EXO, and Graph to begin.";
+        }
+
+        private static void SetConnectionIndicator(FrameworkElement container, Ellipse online, Ellipse offline, TextBlock label, string name, bool connected, string detail)
+        {
+            label.Text = connected ? $"{name} connected" : $"{name} offline";
+            online.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+            offline.Visibility = connected ? Visibility.Collapsed : Visibility.Visible;
+            ToolTipService.SetToolTip(container, detail);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(container, detail);
         }
 
         private async void ButtonConnectAd_Click(object sender, RoutedEventArgs e)
@@ -142,19 +145,16 @@ namespace TermKit
                 return;
             }
 
-            var username = TextBoxRetentionAdminUser.Text.Trim();
-            var password = PasswordBoxRetentionAdminPassword.Password;
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            var credentials = await PromptForAdCredentialsAsync();
+            if (credentials == null)
             {
-                await ShowMessageAsync("Admin SamAccountName and Password are required.", "Input Required");
                 return;
             }
 
             TextBlockRetentionStatus.Text = "Status: Connecting to AD...";
-            var connected = await _adService.ConnectAsync(username, password, adSettings);
+            var connected = await _adService.ConnectAsync(credentials.Value.User, credentials.Value.Password, adSettings);
             if (connected)
             {
-                PasswordBoxRetentionAdminPassword.Password = string.Empty;
                 Logger.Log($"Connected to AD as '{_adService.ConnectedIdentity}'.", LogType.Success);
             }
             else
@@ -166,11 +166,48 @@ namespace TermKit
             UpdateConnectionStatus();
         }
 
+        private async Task<(string User, string Password)?> PromptForAdCredentialsAsync()
+        {
+            var userBox = new TextBox { Header = "Your Admin SamAccountName", Text = _lastAdAdminUser, PlaceholderText = "admin.sam" };
+            var passwordBox = new PasswordBox { Header = "Your Admin Password (AD)" };
+            var errorBlock = new TextBlock { Foreground = new SolidColorBrush(Microsoft.UI.Colors.IndianRed), Visibility = Visibility.Collapsed };
+            var panel = new StackPanel { Spacing = 12, MinWidth = 380 };
+            panel.Children.Add(userBox);
+            panel.Children.Add(passwordBox);
+            panel.Children.Add(errorBlock);
+
+            var dialog = new ContentDialog
+            {
+                Title = "Connect Active Directory",
+                Content = panel,
+                PrimaryButtonText = "Connect",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = Content.XamlRoot
+            };
+            dialog.PrimaryButtonClick += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(userBox.Text) || string.IsNullOrEmpty(passwordBox.Password))
+                {
+                    args.Cancel = true;
+                    errorBlock.Text = "Admin SamAccountName and Password are required.";
+                    errorBlock.Visibility = Visibility.Visible;
+                }
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return null;
+            }
+
+            _lastAdAdminUser = userBox.Text.Trim();
+            return (_lastAdAdminUser, passwordBox.Password);
+        }
+
         private void ButtonDisconnectAd_Click(object sender, RoutedEventArgs e)
         {
             if (_connectionOperationRunning || _retentionConversionRunning) return;
             _adService.Disconnect();
-            PasswordBoxRetentionAdminPassword.Password = string.Empty;
             Logger.Log("Disconnected from AD session.");
             UpdateConnectionStatus();
         }
@@ -192,7 +229,7 @@ namespace TermKit
                 return;
             }
 
-            ButtonRetentionConnectGraph.IsEnabled = false;
+            ButtonConnectGraph.IsEnabled = false;
             var connected = await _authService.ConnectGraphAsync(_exo.ConnectedTenantId);
             if (!connected) throw new InvalidOperationException(_authService.LastError ?? "Graph sign-in failed.");
             if (connected)
@@ -220,7 +257,6 @@ namespace TermKit
             await _exo.DisconnectAsync();
             await _authService.DisconnectGraphAsync();
             _adService.Disconnect();
-            PasswordBoxRetentionAdminPassword.Password = string.Empty;
             UpdateConnectionStatus();
         }
 
@@ -421,9 +457,12 @@ namespace TermKit
                 Content = new ScrollViewer
                 {
                     Content = panel,
+                    MinWidth = 700,
                     MaxHeight = 520
                 }
             };
+            // ContentDialog caps its width at 548 unless this theme resource is raised.
+            dialog.Resources["ContentDialogMaxWidth"] = 820.0;
 
             var resultDialog = await dialog.ShowAsync();
             if (resultDialog != ContentDialogResult.Primary)

@@ -141,6 +141,29 @@ public sealed class AuthenticationTests
     }
 
     [Fact]
+    public void HostedRuntimeLoadsBundledCoreCommandsWithOnlyDesktopModulePaths()
+    {
+        using var runspace = OnPremAdService.CreateRunspace();
+        using var powershell = PowerShell.Create();
+        powershell.Runspace = runspace;
+        powershell.AddScript("""
+            $savedModulePath = $env:PSModulePath
+            try {
+                $env:PSModulePath = [IO.Path]::Combine($env:WINDIR, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules')
+                $ErrorActionPreference = 'Stop'
+                Join-Path 'C:\' 'Modules'
+                [pscustomobject]@{ Ready = $true } | ConvertTo-Json -Compress
+                (Get-Module Microsoft.PowerShell.Management).ModuleBase
+            } finally { $env:PSModulePath = $savedModulePath }
+            """);
+        var results = powershell.Invoke();
+        Assert.False(powershell.HadErrors, string.Join(Environment.NewLine, powershell.Streams.Error));
+        Assert.Equal("C:\\Modules", results[0].ToString());
+        Assert.Equal("{\"Ready\":true}", results[1].ToString());
+        Assert.StartsWith(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar), results[2].ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void PublisherPromptCannotSilentlyTrustCode()
     {
         var host = new LoggerPSHost();
