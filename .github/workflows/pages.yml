@@ -1,0 +1,62 @@
+name: Publish Update Feed
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Build and Release]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Prepare feed from latest published package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FEED_URL: ${{ vars.APPINSTALLER_FEED_URL }}
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          if ($env:FEED_URL -cne "$($env:PAGES_URL)/TermKit.appinstaller") {
+            throw 'APPINSTALLER_FEED_URL must match the configured Pages site.'
+          }
+          ./scripts/Publish-UpdateFeed.ps1 -Repository $env:GH_REPO -FeedUrl $env:FEED_URL -OutputDirectory "$env:RUNNER_TEMP/termkit-pages"
+
+      - name: Upload download page and update feed
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/termkit-pages
+
+      - name: Deploy update feed
+        id: deployment
+        uses: actions/deploy-pages@v4

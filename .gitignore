@@ -11,6 +11,7 @@ BundleArtifacts/
 *.msix
 *.msixbundle
 *.appxsym
+*.appinstaller
 
 ## Local secrets/config (org-specific - see config.sample.json)
 config.json

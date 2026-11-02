@@ -151,6 +151,10 @@ namespace TermKit.Services
 
         [JsonPropertyName("ServiceNow")]
         public ServiceNowConfig? ServiceNow { get; set; }
+
+        // HTTPS .appinstaller feed used by the in-app update check; stamped into the packaged sample at release time.
+        [JsonPropertyName("UpdateFeedUrl")]
+        public string UpdateFeedUrl { get; set; } = string.Empty;
     }
 
     public class ToolConfig
@@ -250,6 +254,11 @@ namespace TermKit.Services
                     if (bundledConfig?.Settings?.ActiveDirectory != null && config.Settings.ActiveDirectory == null)
                     {
                         config.Settings.ActiveDirectory = bundledConfig.Settings.ActiveDirectory;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(config.Settings.UpdateFeedUrl) && !string.IsNullOrWhiteSpace(bundledConfig?.Settings?.UpdateFeedUrl))
+                    {
+                        config.Settings.UpdateFeedUrl = bundledConfig!.Settings.UpdateFeedUrl;
                     }
 
                     if (config.Settings.LicenseGroups.M365G3 == null && bundledConfig?.Settings?.LicenseGroups?.M365G3 != null)

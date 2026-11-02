@@ -3,10 +3,8 @@
 	Imports the TermKit signing certificate so the signed MSIX package can be installed.
 
 .DESCRIPTION
-	Self-signed MSIX packages require the signing certificate to be trusted as a root of the
-	signature chain. This script imports the .cer file into the Local Machine's Trusted Root
-	Certification Authorities store (required for MSIX signature validation) and also adds it
-	to Trusted People for good measure.
+	Imports the publisher's signing certificate into Local Machine Trusted People.
+	Verify the certificate fingerprint through your trusted release channel before running.
 
 	Must be run as Administrator.
 
@@ -35,9 +33,6 @@ $principal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 	throw "This script must be run as Administrator (required to write to the Local Machine certificate store)."
 }
-
-Write-Host "Importing certificate into Trusted Root Certification Authorities (Local Machine)..." -ForegroundColor Cyan
-Import-Certificate -FilePath $CertificatePath -CertStoreLocation "Cert:\LocalMachine\Root" | Out-Null
 
 Write-Host "Importing certificate into Trusted People (Local Machine)..." -ForegroundColor Cyan
 Import-Certificate -FilePath $CertificatePath -CertStoreLocation "Cert:\LocalMachine\TrustedPeople" | Out-Null

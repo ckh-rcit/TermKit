@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Download TermKit, a Windows desktop tool for retaining a terminated user's mailbox as a shared mailbox.">
+  <meta name="color-scheme" content="light">
+  <title>TermKit | Downloads</title>
+  <link rel="icon" href="data:image/png;base64,{{ICON}}">
+  <style>
+    :root { --paper: #fafafa; --ink: #171717; --muted: #575757; --line: #d9d9d9; --accent: #176448; --focus: #006ca8; }
+    * { box-sizing: border-box; letter-spacing: 0; }
+    body { margin: 0; background: linear-gradient(180deg, #eeeeee 0, var(--paper) 280px); color: var(--ink); font: 17px/1.6 "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+    .wrap { width: min(100% - 48px, 880px); margin-inline: auto; }
+    header, footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+    header { padding-block: 22px; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .wordmark { font-weight: 700; }
+    nav { display: flex; flex-wrap: wrap; gap: 22px; }
+    a { color: inherit; text-underline-offset: 4px; }
+    a:hover { color: var(--accent); }
+    a:focus-visible { outline: 3px solid var(--focus); outline-offset: 5px; }
+    .skip { position: absolute; top: -100px; left: 24px; background: white; padding: 8px; }
+    .skip:focus { top: 8px; }
+    main { padding-block: 42px 32px; }
+    .identity { display: flex; gap: 20px; align-items: center; }
+    .identity img { width: 76px; height: 76px; flex: none; }
+    h1, h2 { font-family: "Bahnschrift", "Segoe UI", sans-serif; font-weight: 600; line-height: 1.2; }
+    h1 { font-size: 44px; margin: 0; }
+    h2 { font-size: 22px; margin: 0 0 14px; }
+    p { margin: 12px 0; }
+    .meta { font: 13px/1.6 "Cascadia Code", Consolas, monospace; color: var(--muted); margin: 6px 0 0; }
+    .summary { max-width: 620px; margin: 24px 0; color: var(--muted); }
+    .actions { display: flex; gap: 14px 24px; align-items: center; flex-wrap: wrap; }
+    .primary { display: inline-flex; justify-content: center; padding: 12px 22px; background: var(--ink); color: white; border: 1px solid var(--ink); border-radius: 6px; text-decoration: none; font-weight: 600; }
+    .primary:hover { background: #333333; color: white; }
+    .release { font-size: 14px; color: var(--muted); margin-top: 16px; }
+    section { border-top: 1px solid var(--line); margin-top: 32px; padding-top: 28px; }
+    ol { margin: 0; padding-left: 24px; }
+    li { padding-left: 6px; margin: 12px 0; }
+    code { font: 14px/1.6 "Cascadia Code", Consolas, monospace; overflow-wrap: anywhere; }
+    .note { border-left: 3px solid var(--accent); padding-left: 16px; color: var(--muted); margin-top: 22px; }
+    footer { padding-block: 22px 32px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+    @media (max-width: 480px) { .wrap { width: calc(100% - 32px); } main { padding-top: 28px; } h1 { font-size: 36px; } .identity { gap: 14px; } .identity img { width: 60px; height: 60px; } .actions { align-items: stretch; flex-direction: column; } .actions > a:not(.primary) { align-self: flex-start; } }
+    @media (forced-colors: active) { .primary { border: 1px solid ButtonText; } }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#downloads">Skip to downloads</a>
+  <div class="wrap">
+    <header>
+      <span class="wordmark">CKH-RCIT / TermKit</span>
+      <nav aria-label="Project"><a href="{{REPOSITORY}}">GitHub</a><a href="{{REPOSITORY}}/blob/main/README.md">Documentation</a></nav>
+    </header>
+    <main id="downloads">
+      <div class="identity">
+        <img src="data:image/png;base64,{{ICON}}" alt="" width="76" height="76">
+        <div><h1>TermKit</h1><p class="meta">Windows desktop / x64</p></div>
+      </div>
+      <p class="summary">Retention conversion for terminated users across Active Directory, Exchange Online, and Microsoft Graph, in a native Windows app.</p>
+      <div class="actions">
+        <a class="primary" href="./TermKit.appinstaller" download>Download App Installer</a>
+        <a href="{{PACKAGE}}">Download MSIX</a>
+      </div>
+      <p class="release">Latest stable release: <a href="{{REPOSITORY}}/releases/tag/{{TAG}}">{{TAG}} release notes</a></p>
+      <section aria-labelledby="first-install">
+        <h2 id="first-install">First installation</h2>
+        <ol>
+          <li>Download the <a href="{{TRUST}}">certificate trust bundle</a>. Verify the certificate against the project's <a href="{{REPOSITORY}}/blob/main/README.md">installation guidance</a> before trusting it. Follow your organization's software policy.</li>
+          <li>Extract the bundle, then run <code>Import-SigningCert.ps1</code> in an administrator PowerShell window. It imports the public certificate into <code>LocalMachine\TrustedPeople</code>.</li>
+          <li>Download and open <code>TermKit.appinstaller</code> with Windows App Installer to install TermKit and register the update feed.</li>
+        </ol>
+        <p class="note">TermKit uses a self-signed certificate. Only trust it after verifying its source. Installing the MSIX directly does not enroll the app in feed-based updates.</p>
+      </section>
+      <section aria-labelledby="existing-install">
+        <h2 id="existing-install">Already installed?</h2>
+        <p>Enrolled installations check for updates on launch and in the background. Keep the same update feed; a new installer download is not needed for each release.</p>
+        <p>TermKit also checks this feed when it starts and offers an Updates button when a newer version is available. That check alone does not enroll Windows in automatic updates.</p>
+      </section>
+    </main>
+    <footer><span>TermKit / CKH-RCIT</span><nav aria-label="Resources"><a href="{{REPOSITORY}}/releases">All releases</a><a href="{{REPOSITORY}}/issues">Report an issue</a></nav></footer>
+  </div>
+</body>
+</html>

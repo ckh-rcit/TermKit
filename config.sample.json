@@ -1,5 +1,6 @@
 {
   "Settings": {
+    "UpdateFeedUrl": "",
     "ActiveDirectory": {
       "DomainNetbios": "CONTOSO",
       "DomainDNS": "contoso.org",

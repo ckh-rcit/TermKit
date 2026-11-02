@@ -43,8 +43,15 @@ The packaged app seeds `%LOCALAPPDATA%\TermKit\config.json` from `config.sample.
 ## Build and Release
 
 - `Validate` runs the test suite on every push and pull request to `main`.
-- Pushing a `vMajor.Minor.Build` tag runs `Build and Release`: it checks the tag against the `Version` in `TermKit.csproj` and `Package.appxmanifest`, runs the tests, builds a signed x64 MSIX, verifies the bundled PowerShell core modules, and publishes the MSIX with a certificate trust bundle.
-- The repository needs the `PACKAGE_CERTIFICATE_BASE64` and `PACKAGE_CERTIFICATE_PASSWORD` secrets. The certificate subject must match the manifest publisher (`CN=CKH-RCIT`, the same certificate EXOKit uses, so machines that already trust EXOKit trust TermKit).
-- Bump both version fields before tagging.
+- Pushing a `vMajor.Minor.Build` tag runs `Build and Release`: it stamps the package version from the tag, generates `TermKit.appinstaller`, runs the tests, builds a signed x64 MSIX, verifies the bundled PowerShell core modules, and publishes the MSIX, the appinstaller, and a certificate trust bundle.
+- `Publish Update Feed` then deploys the download page and the update feed to GitHub Pages (`https://ckh-rcit.github.io/TermKit/`).
+- The repository needs the `PACKAGE_CERTIFICATE_BASE64` and `PACKAGE_CERTIFICATE_PASSWORD` secrets and the `APPINSTALLER_FEED_URL` variable. The certificate subject must match the manifest publisher (`CN=CKH-RCIT`, the same certificate EXOKit uses, so machines that already trust EXOKit trust TermKit).
+- Bump `Version` in `TermKit.csproj` and `Package.appxmanifest` before tagging; the tag must not be lower than the manifest version.
+
+## Updates
+
+Install TermKit from the download page by opening `TermKit.appinstaller` with Windows App Installer. Enrolled installs check the feed on launch and in the background. Installing the MSIX directly does not enroll the app.
+
+TermKit also checks the feed itself at startup (`Settings.UpdateFeedUrl`, stamped into the packaged config) and shows **Update to vX.Y.Z** in the top bar when a newer version is published. The button opens the feed in Windows App Installer, which validates the package signature. The check only reads the feed over HTTPS, requires the feed's package name to match, and never installs anything itself.
 
 References: [EXO prerequisites](https://learn.microsoft.com/powershell/exchange/exchange-online-powershell-v2), [WAM compatibility](https://learn.microsoft.com/troubleshoot/exchange/administration/wam-integration-issues), [MSAL browser configuration](https://learn.microsoft.com/entra/msal/dotnet/acquiring-tokens/using-web-browsers), [Azure credential reuse](https://learn.microsoft.com/dotnet/azure/sdk/authentication/best-practices#reuse-credential-instances).

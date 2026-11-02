@@ -27,14 +27,16 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore "TermKit.csproj"
 
-      - name: Verify release version
+      - name: Prepare release identity and update feed
         shell: pwsh
+        env:
+          APPINSTALLER_FEED_URL: ${{ vars.APPINSTALLER_FEED_URL }}
         run: |
-          $version = $env:GITHUB_REF_NAME.Substring(1)
-          [xml]$project = Get-Content 'TermKit.csproj' -Raw
-          [xml]$manifest = Get-Content 'Package.appxmanifest' -Raw
-          if ($project.SelectSingleNode('//Version').InnerText -ne $version) { throw 'Assembly version does not match the release tag.' }
-          if ($manifest.SelectSingleNode("/*[local-name()='Package']/*[local-name()='Identity']").Version -ne "$version.0") { throw 'Package version does not match the release tag.' }
+          $packageUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME/TermKit-$env:GITHUB_REF_NAME-x64.msix"
+          ./scripts/Prepare-Release.ps1 -VersionTag $env:GITHUB_REF_NAME -FeedUrl $env:APPINSTALLER_FEED_URL -PackageUrl $packageUrl
+          $sample = Get-Content config.sample.json -Raw | ConvertFrom-Json
+          $sample.Settings | Add-Member -NotePropertyName UpdateFeedUrl -NotePropertyValue "$env:APPINSTALLER_FEED_URL" -Force
+          $sample | ConvertTo-Json -Depth 20 | Set-Content config.sample.json -Encoding utf8
 
       - name: Regression tests
         run: dotnet test tests/TermKit.Tests/TermKit.Tests.csproj --configuration Release --runtime win-x64
@@ -66,6 +68,9 @@ jobs:
           /p:WindowsAppSDKSelfContained=true
           /p:SelfContained=true
           /p:PublishReadyToRun=false
+          /p:Version="$($env:GITHUB_REF_NAME.Substring(1))"
+          /p:AppxPackageSigningTimestampDigestAlgorithm=SHA256
+          /p:AppxPackageSigningTimestampServerUrl="http://timestamp.digicert.com"
           /p:AppxPackageSigningEnabled=true
           /p:PackageCertificateKeyFile="$env:RUNNER_TEMP\TermKitSigning.pfx"
 
@@ -113,5 +118,6 @@ jobs:
           files: |
             TermKit-*.msix
             TermKit-Trust-Bundle-*.zip
+            TermKit.appinstaller
           generate_release_notes: true
 

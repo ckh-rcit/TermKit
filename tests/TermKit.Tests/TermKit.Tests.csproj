@@ -26,5 +26,6 @@
     <Compile Include="..\..\Services\PowerShellPrerequisites.cs" Link="Services\PowerShellPrerequisites.cs" />
     <Compile Include="..\..\Services\PermissionVerification.cs" Link="Services\PermissionVerification.cs" />
     <Compile Include="..\..\Services\RetentionRules.cs" Link="Services\RetentionRules.cs" />
+    <Compile Include="..\..\Services\UpdateChecker.cs" Link="Services\UpdateChecker.cs" />
   </ItemGroup>
 </Project>

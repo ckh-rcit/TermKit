@@ -64,7 +64,11 @@
                         </Button.Flyout>
                     </Button>
                 </StackPanel>
-                <Button Grid.Column="1" x:Name="ButtonOpenSettings" Content="Settings" Click="ButtonOpenSettings_Click" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button x:Name="ButtonUpdates" Content="Check for updates" Click="ButtonUpdates_Click"
+                            ToolTipService.ToolTip="Check the update feed for a newer TermKit" />
+                    <Button x:Name="ButtonOpenSettings" Content="Settings" Click="ButtonOpenSettings_Click" />
+                </StackPanel>
             </Grid>
         </Border>
 

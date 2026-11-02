@@ -31,6 +31,7 @@ namespace TermKit
         private string _retentionSummaryText = string.Empty;
         private bool _connectionOperationRunning;
         private string _lastAdAdminUser = string.Empty;
+        private UpdateCheckResult? _availableUpdate;
 
         public MainWindow()
         {
@@ -56,6 +57,75 @@ namespace TermKit
             UpdateConnectionStatus();
             Logger.Log("TermKit retention workflow loaded. Connect AD, EXO, and Graph to begin.");
             AppWindow.Closing += (_, args) => args.Cancel = _retentionConversionRunning || _connectionOperationRunning;
+            _ = CheckForUpdatesAsync(userInitiated: false);
+        }
+
+        private static (string Name, Version Version)? GetCurrentPackage()
+        {
+            try
+            {
+                var id = Windows.ApplicationModel.Package.Current.Id;
+                return (id.Name, new Version(id.Version.Major, id.Version.Minor, id.Version.Build, id.Version.Revision));
+            }
+            catch (InvalidOperationException)
+            {
+                return null; // Not running from an installed package, so there is nothing to update.
+            }
+        }
+
+        private async Task CheckForUpdatesAsync(bool userInitiated)
+        {
+            var feed = _config.Settings.UpdateFeedUrl;
+            if (string.IsNullOrWhiteSpace(feed))
+            {
+                if (userInitiated) await ShowMessageAsync("No update feed is configured. Set Settings.UpdateFeedUrl in config.json.", "Check for Updates");
+                return;
+            }
+
+            var package = GetCurrentPackage();
+            if (package == null)
+            {
+                if (userInitiated) await ShowMessageAsync("Updates apply to the installed package; this copy is running unpackaged.", "Check for Updates");
+                return;
+            }
+
+            ButtonUpdates.IsEnabled = false;
+            try
+            {
+                var result = await UpdateChecker.CheckAsync(feed, package.Value.Name, package.Value.Version);
+                if (result.Status == UpdateStatus.Available)
+                {
+                    _availableUpdate = result;
+                    ButtonUpdates.Content = $"Update to v{result.LatestVersion}";
+                    ButtonUpdates.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+                    Logger.Log(result.Message, LogType.Success);
+                }
+                else
+                {
+                    _availableUpdate = null;
+                    ButtonUpdates.Content = "Check for updates";
+                    ButtonUpdates.ClearValue(FrameworkElement.StyleProperty);
+                    Logger.Log(result.Message, result.Status == UpdateStatus.Failed ? LogType.Warning : LogType.Info);
+                    if (userInitiated) await ShowMessageAsync(result.Message, result.Status == UpdateStatus.Failed ? "Update Check Failed" : "Check for Updates");
+                }
+            }
+            finally
+            {
+                ButtonUpdates.IsEnabled = !(_retentionConversionRunning || _connectionOperationRunning);
+            }
+        }
+
+        private async void ButtonUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            if (_availableUpdate == null)
+            {
+                await CheckForUpdatesAsync(userInitiated: true);
+                return;
+            }
+
+            if (!UpdateChecker.TryGetFeedUri(_config.Settings.UpdateFeedUrl, out var feedUri)) return;
+            var confirmed = await ShowConfirmAsync($"TermKit {_availableUpdate.LatestVersion} is available. Open the update feed at {feedUri.Host}? Windows App Installer will validate the package signature and update TermKit; it will close this window.", "Update TermKit");
+            if (confirmed) await Windows.System.Launcher.LaunchUriAsync(feedUri);
         }
 
         private IntPtr GetWindowHandle() => WindowNative.GetWindowHandle(this);
@@ -102,6 +172,7 @@ namespace TermKit
             ButtonConnectGraph.IsEnabled = !busy && _exo.IsConnected && !_authService.IsGraphConnected;
             ButtonDisconnect.IsEnabled = !busy;
             ButtonOpenSettings.IsEnabled = !busy;
+            ButtonUpdates.IsEnabled = !busy;
             ButtonRetentionLookup.IsEnabled = !busy && _config.Settings.ServiceNow?.Enabled == true;
 
             var canRunRetention = _adService.IsConnected && _exo.IsConnected && _authService.IsGraphConnected && !busy;
