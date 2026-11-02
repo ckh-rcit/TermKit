@@ -38,6 +38,7 @@ namespace TermKit
             InitializeComponent();
 
             AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "toolbox.ico"));
+            AppWindow.Resize(new Windows.Graphics.SizeInt32(1240, 600));
             ApplyDarkTitleBar();
 
             _config = ConfigService.Load();
