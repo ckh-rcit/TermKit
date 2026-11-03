@@ -11,7 +11,7 @@
   <Identity
     Name="87ce6be6-f7db-4d56-8aac-5f3e2c2f9f7f"
     Publisher="CN=CKH-RCIT"
-    Version="1.0.22.0" />
+    Version="1.0.23.0" />
 
   <mp:PhoneIdentity PhoneProductId="87ce6be6-f7db-4d56-8aac-5f3e2c2f9f7f" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
