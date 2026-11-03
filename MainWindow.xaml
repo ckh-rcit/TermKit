@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:services="using:TermKit.Services"
     mc:Ignorable="d"
     Title="TermKit">
 
@@ -74,12 +75,17 @@
 
         <Grid Grid.Row="1" ColumnSpacing="12">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition x:Name="LeftColumn" Width="640" />
             <ColumnDefinition Width="*" MinWidth="280" />
         </Grid.ColumnDefinitions>
 
-        <ScrollViewer Grid.Column="0" Width="640">
+        <ScrollViewer Grid.Column="0">
             <StackPanel Spacing="12">
+            <SelectorBar x:Name="SelectorBarMode" SelectionChanged="SelectorBarMode_SelectionChanged">
+                <SelectorBarItem x:Name="SelectorItemSingle" Text="Single" IsSelected="True" />
+                <SelectorBarItem x:Name="SelectorItemBatch" Text="Batch" />
+            </SelectorBar>
+            <StackPanel x:Name="PanelSingle" Spacing="12">
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
                     <StackPanel Spacing="10">
@@ -130,6 +136,65 @@
                 </Border>
 
                 <TextBlock x:Name="TextBlockRetentionStatus" Text="Status: Idle" Opacity="0.8" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <StackPanel x:Name="PanelBatch" Spacing="12" Visibility="Collapsed">
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="1. Task numbers" FontWeight="SemiBold" FontSize="15" />
+                        <TextBox x:Name="TextBoxBatchTasks" AcceptsReturn="True" TextWrapping="Wrap" Height="72"
+                                 PlaceholderText="One TASK number per line (commas and spaces also work)" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="ButtonBatchLookup" Content="Look up all" Click="ButtonBatchLookup_Click" VerticalAlignment="Bottom"
+                                    ToolTipService.ToolTip="Read each task from ServiceNow with the service account" />
+                            <NumberBox x:Name="NumberBoxBatchConcurrency" Header="Run at once" Value="3" Minimum="1" Maximum="5"
+                                       SpinButtonPlacementMode="Inline" Width="130" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="2. Review and process" FontWeight="SemiBold" FontSize="15" />
+                        <ListView x:Name="ListViewBatch" SelectionMode="None" MinHeight="120" MaxHeight="320">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="services:BatchItem">
+                                    <Grid ColumnSpacing="10" RowSpacing="2" Padding="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="105" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="130" />
+                                            <ColumnDefinition Width="100" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{x:Bind TaskNumber}" FontWeight="SemiBold" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind TermUserDisplay, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="2" Text="{x:Bind DelegateDisplay, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="3" Text="{x:Bind EndDateDisplay, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="4" Text="{x:Bind StatusText, Mode=OneWay}" FontWeight="SemiBold" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" Text="{x:Bind Message, Mode=OneWay}"
+                                                   FontSize="12" Opacity="0.75" TextWrapping="Wrap" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="ButtonBatchProcess" Content="Process batch" Style="{StaticResource AccentButtonStyle}" IsEnabled="False" Click="ButtonBatchProcess_Click" />
+                            <Button x:Name="ButtonBatchStop" Content="Stop after current" IsEnabled="False" Click="ButtonBatchStop_Click"
+                                    ToolTipService.ToolTip="Terminations already running finish; queued ones do not start" />
+                            <Button x:Name="ButtonBatchCopy" Content="Copy summaries" IsEnabled="False" Click="ButtonBatchCopy_Click" />
+                            <Button x:Name="ButtonBatchClear" Content="Clear" Click="ButtonBatchClear_Click" />
+                        </StackPanel>
+                        <TextBlock x:Name="TextBlockBatchStatus" Text="Paste task numbers, then Look up all." Opacity="0.8" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
             </StackPanel>
         </ScrollViewer>
 

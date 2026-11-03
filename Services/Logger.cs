@@ -37,10 +37,28 @@ namespace TermKit.Services
         private static readonly object _lock = new();
         public static string LogPath => System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TermKit", "Logs", $"{DateTime.Now:yyyy-MM-dd}.log");
 
+        private static readonly System.Threading.AsyncLocal<string?> CurrentScope = new();
+
+        /// <summary>Prefixes every line logged by this logical flow (and the tasks it awaits) until the scope is disposed.</summary>
+        public static IDisposable BeginScope(string name)
+        {
+            var previous = CurrentScope.Value;
+            CurrentScope.Value = name;
+            return new ScopeToken(previous);
+        }
+
+        private sealed class ScopeToken : IDisposable
+        {
+            private readonly string? _previous;
+            public ScopeToken(string? previous) => _previous = previous;
+            public void Dispose() => CurrentScope.Value = _previous;
+        }
+
         public static void Log(string message, LogType type = LogType.Info)
         {
             var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-            var line = $"[{timestamp}] {message}";
+            var scope = CurrentScope.Value;
+            var line = scope == null ? $"[{timestamp}] {message}" : $"[{timestamp}] [{scope}] {message}";
 
             lock (_lock)
             {

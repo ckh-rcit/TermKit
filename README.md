@@ -32,6 +32,16 @@ Tick **No email retention needed** (Look up ticks it when the request answers "N
 
 The AD description keeps the exact `Shared Mailbox - DO NOT DELETE <Task #> - UNTIL <MM/DD/YYYY>` format. The scheduled `TerminateAccounts.ps1` job in the Actions repo finds accounts by that prefix and parses the date after `UNTIL `, so changing the wording would exclude the account from cleanup. That job acts on accounts whose date is before today.
 
+## Batch Mode
+
+Switch from **Single** to **Batch** at the top of the form to process several terminations at once.
+
+1. Paste TASK numbers (one per line, commas or spaces also work, up to 50) and click **Look up all**. Each task is read from ServiceNow with the service account, exactly like the single Look up, including the no-retention rule.
+2. Review the table. Rows that are complete are **Ready**. Rows with a failed lookup, a missing term user, delegate or date, or a second task for the same person are **Needs attention** and are left out; fix them in Single mode.
+3. Connect AD, EXO, and Graph, set **Run at once** (default 3, maximum 5), and click **Process batch**. Each termination runs the same workflow as Single mode; one failure never stops the others.
+
+Each termination takes roughly 15 minutes of mostly waiting, so running three at a time cuts a long list substantially. Log lines are prefixed with the task number. **Stop after current** lets running terminations finish and keeps queued ones from starting. A mailbox over 50 GB asks for confirmation one dialog at a time, naming the task. **Copy summaries** copies each finished task's summary. A running batch blocks window close; changes already made are not rolled back.
+
 ## Local Verification
 
 ```powershell

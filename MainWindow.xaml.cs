@@ -1,6 +1,9 @@
 using System;
+using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -29,6 +32,8 @@ namespace TermKit
         private bool _showWarnings;
         private bool _retentionConversionRunning;
         private string _retentionSummaryText = string.Empty;
+        private readonly ObservableCollection<BatchItem> _batchItems = new();
+        private CancellationTokenSource? _batchStop;
         private bool _connectionOperationRunning;
         private string _lastAdAdminUser = string.Empty;
         private UpdateCheckResult? _availableUpdate;
@@ -37,6 +42,7 @@ namespace TermKit
         public MainWindow()
         {
             InitializeComponent();
+            ListViewBatch.ItemsSource = _batchItems;
 
             AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "toolbox.ico"));
             AppWindow.Resize(new Windows.Graphics.SizeInt32(1240, 600));
@@ -177,6 +183,7 @@ namespace TermKit
             ButtonOpenSettings.IsEnabled = !busy;
             ButtonUpdates.IsEnabled = !busy;
             ButtonRetentionLookup.IsEnabled = !busy && _config.Settings.ServiceNow?.Enabled == true;
+            UpdateBatchControls();
 
             var canRunRetention = _adService.IsConnected && _exo.IsConnected && _authService.IsGraphConnected && !busy;
             ButtonRetentionProcess.IsEnabled = canRunRetention;
@@ -505,6 +512,181 @@ namespace TermKit
             {
                 await ShowMessageAsync(string.Join(Environment.NewLine, details.Warnings) + Environment.NewLine + Environment.NewLine + "Review and complete the fields before processing.", "Task Lookup: Review Needed");
             }
+        }
+
+        private void SelectorBarMode_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+        {
+            if (PanelSingle == null || PanelBatch == null) return;
+            var batch = sender.SelectedItem == SelectorItemBatch;
+            PanelSingle.Visibility = batch ? Visibility.Collapsed : Visibility.Visible;
+            PanelBatch.Visibility = batch ? Visibility.Visible : Visibility.Collapsed;
+            LeftColumn.Width = new GridLength(batch ? 780 : 640);
+        }
+
+        private void UpdateBatchControls()
+        {
+            var busy = _retentionConversionRunning || _connectionOperationRunning;
+            var connected = _adService.IsConnected && _exo.IsConnected && _authService.IsGraphConnected;
+            ButtonBatchLookup.IsEnabled = !busy && _config.Settings.ServiceNow?.Enabled == true;
+            ButtonBatchProcess.IsEnabled = !busy && connected && _batchItems.Any(item => item.Status == BatchItemStatus.Ready);
+            ButtonBatchStop.IsEnabled = _batchStop != null;
+            ButtonBatchClear.IsEnabled = !busy;
+            ButtonBatchCopy.IsEnabled = !busy && _batchItems.Any(item => !string.IsNullOrEmpty(item.Summary));
+            TextBoxBatchTasks.IsEnabled = !busy;
+            NumberBoxBatchConcurrency.IsEnabled = !busy;
+        }
+
+        private async void ButtonBatchLookup_Click(object sender, RoutedEventArgs e)
+            => await RunConnectionOperationAsync(BatchLookupAsync);
+
+        private async Task BatchLookupAsync()
+        {
+            if (_serviceNowService == null || _config.Settings.ServiceNow?.Enabled != true)
+            {
+                await ShowMessageAsync("ServiceNow integration is disabled. Enable it in Settings.", "Batch Lookup");
+                return;
+            }
+
+            if (!Guid.TryParse(GetTenantId(), out _))
+            {
+                await ShowMessageAsync("Connect Exchange Online (or Microsoft Graph) first so the Key Vault sign-in uses the right tenant.", "Batch Lookup");
+                return;
+            }
+
+            var tasks = BatchPlanner.ParseTaskNumbers(TextBoxBatchTasks.Text, out var rejected);
+            if (rejected.Count > 0) Logger.Log($"[Batch] Ignored invalid entries: {string.Join(", ", rejected)}", LogType.Warning);
+            if (tasks.Count == 0)
+            {
+                await ShowMessageAsync("Enter at least one task number.", "Batch Lookup");
+                return;
+            }
+
+            if (tasks.Count > BatchPlanner.MaxItems)
+            {
+                await ShowMessageAsync($"A batch is limited to {BatchPlanner.MaxItems} tasks; {tasks.Count} were entered.", "Batch Lookup");
+                return;
+            }
+
+            _batchItems.Clear();
+            foreach (var task in tasks) _batchItems.Add(new BatchItem(task) { Message = "Waiting to be looked up." });
+
+            var index = 0;
+            foreach (var item in _batchItems.ToList())
+            {
+                index++;
+                TextBlockBatchStatus.Text = $"Looking up {item.TaskNumber} ({index} of {tasks.Count})...";
+                item.Message = "Looking up...";
+                var lookup = await _serviceNowService.LookupTaskAsync(item.TaskNumber);
+                BatchPlanner.ApplyLookup(item, lookup, DateTime.Today);
+            }
+
+            BatchPlanner.FlagDuplicates(_batchItems);
+            var ready = _batchItems.Count(item => item.Status == BatchItemStatus.Ready);
+            var attention = _batchItems.Count - ready;
+            TextBlockBatchStatus.Text = $"{ready} ready, {attention} need attention (skipped; fix them in Single mode)."
+                + (_adService.IsConnected && _exo.IsConnected && _authService.IsGraphConnected ? string.Empty : " Connect AD, EXO, and Graph to process.");
+            Logger.Log($"[Batch] Looked up {tasks.Count} task(s): {ready} ready, {attention} need attention.", attention == 0 ? LogType.Success : LogType.Warning);
+        }
+
+        private async void ButtonBatchProcess_Click(object sender, RoutedEventArgs e)
+        {
+            if (_retentionConversionRunning || _connectionOperationRunning) return;
+            if (!_adService.IsConnected || !_exo.IsConnected || !_authService.IsGraphConnected)
+            {
+                await ShowMessageAsync("Connect AD, EXO, and Graph before running the batch.", "Connection Required");
+                return;
+            }
+
+            var ready = _batchItems.Where(item => item.Status == BatchItemStatus.Ready).ToList();
+            if (ready.Count == 0)
+            {
+                await ShowMessageAsync("No rows are ready to process.", "Process Batch");
+                return;
+            }
+
+            var value = NumberBoxBatchConcurrency.Value;
+            var concurrency = Math.Clamp(double.IsNaN(value) ? 3 : (int)value, 1, 5);
+            var skipped = _batchItems.Count - ready.Count;
+            var confirmed = await ShowConfirmAsync(
+                $"Process {ready.Count} termination(s)? {skipped} row(s) will be skipped. Up to {concurrency} run at once and each takes roughly 15 minutes. Changes are not rolled back automatically.",
+                "Process Batch");
+            if (!confirmed) return;
+
+            _retentionConversionRunning = true;
+            _batchStop = new CancellationTokenSource();
+            UpdateConnectionStatus();
+            Logger.Log($"[Batch] Starting {ready.Count} termination(s), {concurrency} at a time.");
+            try
+            {
+                var service = new RetentionConversionService(_adService, _exo, _graphService, _config, _serviceNowService);
+                var confirmGate = new SemaphoreSlim(1, 1);
+                async Task<bool> ConfirmFor(string task, string prompt)
+                {
+                    // Only one dialog can be open at a time.
+                    await confirmGate.WaitAsync();
+                    try { return await ShowConfirmAsync($"{task}: {prompt}", "Warning: Mailbox Exceeds 50 GB"); }
+                    finally { confirmGate.Release(); }
+                }
+
+                await BatchRunner.RunAsync(_batchItems.ToList(), concurrency, async item =>
+                {
+                    using (Logger.BeginScope(item.TaskNumber))
+                    {
+                        return await service.ProcessAsync(item.ToRequest(), prompt => ConfirmFor(item.TaskNumber, prompt));
+                    }
+                }, _batchStop.Token);
+
+                var succeeded = _batchItems.Count(item => item.Status == BatchItemStatus.Succeeded);
+                var failed = _batchItems.Count(item => item.Status == BatchItemStatus.Failed);
+                var notStarted = _batchItems.Count(item => item.Status == BatchItemStatus.NotStarted);
+                var finished = $"Batch finished: {succeeded} done, {failed} failed, {notStarted} not started, {skipped} skipped.";
+                TextBlockBatchStatus.Text = finished;
+                Logger.Log($"[Batch] {finished}", failed == 0 ? LogType.Success : LogType.Warning);
+                await ShowMessageAsync(finished, "Batch Complete");
+            }
+            catch (Exception exception)
+            {
+                ErrorReporter.Report("Batch failed", exception);
+            }
+            finally
+            {
+                _batchStop.Dispose();
+                _batchStop = null;
+                _retentionConversionRunning = false;
+                UpdateConnectionStatus();
+            }
+        }
+
+        private void ButtonBatchStop_Click(object sender, RoutedEventArgs e)
+        {
+            _batchStop?.Cancel();
+            ButtonBatchStop.IsEnabled = false;
+            TextBlockBatchStatus.Text = "Stopping: terminations already running will finish; queued ones will not start.";
+            Logger.Log("[Batch] Stop requested. Running terminations finish; queued ones will not start.", LogType.Warning);
+        }
+
+        private async void ButtonBatchCopy_Click(object sender, RoutedEventArgs e)
+        {
+            var text = string.Join(Environment.NewLine + Environment.NewLine,
+                _batchItems.Where(item => !string.IsNullOrEmpty(item.Summary)).Select(item => $"{item.TaskNumber} ({item.TermUser}):{Environment.NewLine}{item.Summary}"));
+            if (text.Length == 0)
+            {
+                await ShowMessageAsync("No summaries are available yet.", "Copy Summaries");
+                return;
+            }
+
+            var package = new DataPackage();
+            package.SetText(text);
+            Clipboard.SetContent(package);
+            Logger.Log("[Batch] Summaries copied to clipboard.", LogType.Success);
+        }
+
+        private void ButtonBatchClear_Click(object sender, RoutedEventArgs e)
+        {
+            if (_retentionConversionRunning || _connectionOperationRunning) return;
+            _batchItems.Clear();
+            TextBlockBatchStatus.Text = "Paste task numbers, then Look up all.";
+            UpdateConnectionStatus();
         }
 
         private async void ButtonRetentionProcess_Click(object sender, RoutedEventArgs e)
