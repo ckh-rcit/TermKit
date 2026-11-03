@@ -85,6 +85,34 @@ public sealed class AuthenticationTests
     }
 
     [Fact]
+    public async Task RestNotFoundForARestoredUserWithoutAMailboxYetRemainsAbsent()
+    {
+        using var runspace = OnPremAdService.CreateRunspace();
+        using var powershell = PowerShell.Create();
+        powershell.Runspace = runspace;
+        powershell.AddScript("""
+            function Get-EXOMailbox { [CmdletBinding()] param($Identity)
+                $message = 'Error while querying REST service. HttpStatusCode=404 ErrorMessage={"error":{"code":"NotFound","message":"Error executing request. The operation couldn''t be performed because object ''user@contoso.org'' couldn''t be found on ''HOST''.","details":[{"code":"Context","message":"Ex6F9304|Microsoft.Exchange.Configuration.Tasks.ManagementObjectNotFoundException|The operation couldn''t be performed because object ''user@contoso.org'' couldn''t be found on ''HOST''."}]}}'
+                $PSCmdlet.WriteError([Management.Automation.ErrorRecord]::new([InvalidOperationException]::new($message), 'RestError', [Management.Automation.ErrorCategory]::NotSpecified, $Identity))
+            }
+            """);
+        powershell.Invoke();
+        var exo = new ExoPowerShellService(runspace);
+        try { Assert.Null(await exo.GetMailboxRecipientTypeDetailsAsync("user@contoso.org", true)); }
+        finally { await exo.ShutdownAsync(); }
+    }
+
+    [Theory]
+    [InlineData("Error while querying REST service. HttpStatusCode=403 ErrorMessage=Forbidden")]
+    [InlineData("Error while querying REST service. HttpStatusCode=404 ErrorMessage=Not Found")]
+    [InlineData("ManagementObjectNotFoundException without an HTTP status")]
+    public void OtherRestFailuresAreNotTreatedAsAMissingObject(string message)
+    {
+        var error = new ErrorRecord(new InvalidOperationException(message), "RestError", ErrorCategory.NotSpecified, "x");
+        Assert.False(ExoPowerShellService.IsMissingObject(error));
+    }
+
+    [Fact]
     public async Task TypedMissingMailboxRemainsAbsent()
     {
         using var runspace = OnPremAdService.CreateRunspace();

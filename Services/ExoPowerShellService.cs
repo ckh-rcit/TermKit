@@ -777,9 +777,7 @@ namespace TermKit.Services
               .AddParameter("Identity", identity)
                             .AddParameter("ErrorAction", "Continue");
             var results = ps.Invoke();
-            if (ps.HadErrors && ps.Streams.Error.Count > 0 && ps.Streams.Error.All(error =>
-                error.CategoryInfo.Category == ErrorCategory.ObjectNotFound &&
-                error.FullyQualifiedErrorId.Contains("ManagementObjectNotFoundException", StringComparison.Ordinal))) return null;
+            if (ps.HadErrors && ps.Streams.Error.Count > 0 && ps.Streams.Error.All(IsMissingObject)) return null;
             if (ps.HadErrors) throw BuildPipelineException(ps);
             if (results.Count == 0)
             {
@@ -789,6 +787,25 @@ namespace TermKit.Services
             return results[0].Properties["RecipientTypeDetails"]?.Value?.ToString()
                 ?? throw new InvalidOperationException("EXO returned a mailbox without its recipient type; state is unconfirmed.");
         });
+
+        /// <summary>
+        /// True only for the server's typed "object not found" error. REST-backed cmdlets such as Get-EXOMailbox surface it
+        /// as a plain error whose message carries HttpStatusCode=404 and ManagementObjectNotFoundException.
+        /// </summary>
+        internal static bool IsMissingObject(ErrorRecord error)
+        {
+            if (error.CategoryInfo.Category == ErrorCategory.ObjectNotFound &&
+                error.FullyQualifiedErrorId.Contains("ManagementObjectNotFoundException", StringComparison.Ordinal)) return true;
+
+            foreach (var text in new[] { error.Exception?.Message, error.ErrorDetails?.Message, error.FullyQualifiedErrorId, error.ToString() })
+            {
+                if (text != null &&
+                    text.Contains("HttpStatusCode=404", StringComparison.Ordinal) &&
+                    text.Contains("ManagementObjectNotFoundException", StringComparison.Ordinal)) return true;
+            }
+
+            return false;
+        }
 
         public Task<double> GetMailboxSizeMbAsync(string identity) => RunOnStaThreadAsync(() =>
         {
