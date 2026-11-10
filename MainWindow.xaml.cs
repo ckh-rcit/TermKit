@@ -42,6 +42,7 @@ namespace TermKit
         public MainWindow()
         {
             InitializeComponent();
+            Title = $"TermKit v{GetAppVersion()}";
             ListViewBatch.ItemsSource = _batchItems;
 
             AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "toolbox.ico"));
@@ -54,18 +55,30 @@ namespace TermKit
             _serviceNowService = _config.Settings.ServiceNow != null ? new ServiceNowService(_config.Settings.ServiceNow, GetTenantId) : null;
 
             Logger.LogEntryWritten += OnLogEntryWritten;
-            Closed += async (_, _) =>
+            Closed += (_, _) =>
             {
                 Logger.LogEntryWritten -= OnLogEntryWritten;
                 _adService.Disconnect();
-                try { await _exo.ShutdownAsync(); }
-                catch (Exception exception) { Logger.Log($"Session shutdown: {exception.Message}", LogType.Warning); }
+                // A lingering windowless process makes the next Start-menu launch show nothing, so always end the process.
+                _ = Task.Run(async () =>
+                {
+                    try { await _exo.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(10)); }
+                    catch (Exception exception) { Logger.Log($"Session shutdown: {exception.Message}", LogType.Warning); }
+                    Environment.Exit(0);
+                });
             };
 
             UpdateConnectionStatus();
             Logger.Log("TermKit retention workflow loaded. Connect AD, EXO, and Graph to begin.");
             AppWindow.Closing += (_, args) => args.Cancel = _retentionConversionRunning || _connectionOperationRunning;
             _ = CheckForUpdatesAsync(userInitiated: false);
+        }
+
+        private static string GetAppVersion()
+        {
+            var package = GetCurrentPackage();
+            if (package != null) return $"{package.Value.Version.Major}.{package.Value.Version.Minor}.{package.Value.Version.Build}";
+            return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "development";
         }
 
         private static (string Name, Version Version)? GetCurrentPackage()
