@@ -68,7 +68,12 @@ namespace TermKit.Services
 
         public override void WriteVerboseLine(string message) => Logger.Log($"VERBOSE: {message}");
 
-        public override void WriteWarningLine(string message) => Logger.Log($"WARNING: {message}", LogType.Warning);
+        public override void WriteWarningLine(string message)
+        {
+            // The AD module warns on import when the PC has no default domain (non-joined); every call passes -Server, so it is noise.
+            if (message.StartsWith("Error initializing default drive", StringComparison.OrdinalIgnoreCase)) return;
+            Logger.Log($"WARNING: {message}", LogType.Warning);
+        }
 
         // Note: warnings are still logged as LogType.Warning here so they're captured in Logger's
         // history; the UI (MainWindow) is responsible for hiding LogType.Warning lines by default

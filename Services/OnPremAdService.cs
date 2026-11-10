@@ -27,6 +27,7 @@ namespace TermKit.Services
     {
         private PSCredential? _credential;
         private string? _connectedIdentity;
+        private IReadOnlyList<string>? _controllers;
 
         public bool IsConnected => _credential != null;
         public string? ConnectedIdentity => _connectedIdentity;
@@ -66,8 +67,19 @@ namespace TermKit.Services
 
             var testCredential = new PSCredential(adminIdentity, secure);
 
-            var failures = new List<string>();
-            foreach (var controller in GetDomainControllers(config))
+            var probe = await AdControllerDiscovery.ResolveAsync(config);
+            var failures = new List<string>(probe.Problems);
+            foreach (var problem in probe.Problems) Logger.Log($"Skipping domain controller {problem}", LogType.Warning);
+            if (probe.Reachable.Count == 0)
+            {
+                secure.Dispose();
+                LastError = failures.Count > 0
+                    ? "No domain controller is reachable from this PC." + Environment.NewLine + string.Join(Environment.NewLine, failures)
+                    : "No domain controllers are configured.";
+                return false;
+            }
+
+            foreach (var controller in probe.Reachable)
             {
                 try
                 {
@@ -90,6 +102,7 @@ namespace TermKit.Services
 
                     _credential = testCredential;
                     _connectedIdentity = adminIdentity;
+                    _controllers = probe.Reachable;
                     return true;
                 }
                 catch (Exception exception)
@@ -115,6 +128,7 @@ namespace TermKit.Services
             _credential?.Password?.Dispose();
             _credential = null;
             _connectedIdentity = null;
+            _controllers = null;
         }
 
         public async Task<OnPremAdUser?> GetUserBySamAccountNameAsync(string samAccountName, ActiveDirectoryConfig config)
@@ -437,21 +451,8 @@ namespace TermKit.Services
             throw last ?? new InvalidOperationException("No domain controllers were available.");
         }
 
-        private static IEnumerable<string> GetDomainControllers(ActiveDirectoryConfig config)
-        {
-            var list = new List<string>();
-            if (!string.IsNullOrWhiteSpace(config.PrimaryDomainController))
-            {
-                list.Add(config.PrimaryDomainController.Trim());
-            }
-
-            if (config.FallbackDomainControllers != null)
-            {
-                list.AddRange(config.FallbackDomainControllers.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()));
-            }
-
-            return list.Distinct(StringComparer.OrdinalIgnoreCase);
-        }
+        private IEnumerable<string> GetDomainControllers(ActiveDirectoryConfig config) =>
+            _controllers ?? AdControllerDiscovery.BuildCandidates(config);
 
         private static Exception BuildPipelineException(PowerShell ps)
         {

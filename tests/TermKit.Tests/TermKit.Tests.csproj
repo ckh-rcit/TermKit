@@ -22,6 +22,7 @@
     <Compile Include="..\..\Services\ExoPowerShellService.cs" Link="Services\ExoPowerShellService.cs" />
     <Compile Include="..\..\Services\LoggerPSHost.cs" Link="Services\LoggerPSHost.cs" />
     <Compile Include="..\..\Services\OnPremAdService.cs" Link="Services\OnPremAdService.cs" />
+    <Compile Include="..\..\Services\AdControllerDiscovery.cs" Link="Services\AdControllerDiscovery.cs" />
     <Compile Include="..\..\Services\ConfigService.cs" Link="Services\ConfigService.cs" />
     <Compile Include="..\..\Services\PowerShellPrerequisites.cs" Link="Services\PowerShellPrerequisites.cs" />
     <Compile Include="..\..\Services\PermissionVerification.cs" Link="Services\PermissionVerification.cs" />
