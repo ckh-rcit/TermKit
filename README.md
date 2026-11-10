@@ -55,7 +55,7 @@ Live AD credentials, cloud sign-in, Key Vault access, and a controlled retention
 
 ## Configuration
 
-The packaged app seeds `%LOCALAPPDATA%\TermKit\config.json` from `config.sample.json` on first run. Replace the placeholder AD, license group, and ServiceNow values there. Retention conversion refuses to start while the AD domain, disabled-users OU, M365 G3/G5 license group IDs, or primary license group are missing. Graph always requests `Directory.ReadWrite.All`, `Group.ReadWrite.All`, and `User.ReadWrite.All`, the same scopes as the PowerShell toolkit.
+The packaged app seeds `%LOCALAPPDATA%\TermKit\config.json` from the `config.json` bundled in the package on first run. Release builds bundle your organization's configuration from the repository secret `TERMKIT_CONFIG_JSON` (the full `config.json` content) and fail if it is missing or still contains the sample placeholders. When a local `config.json` still holds the `config.sample.json` placeholders, an update replaces it with the bundled one and keeps the old file as `config.json.bak`. Retention conversion refuses to start while the AD domain, disabled-users OU, M365 G3/G5 license group IDs, or primary license group are missing. Graph always requests `Directory.ReadWrite.All`, `Group.ReadWrite.All`, and `User.ReadWrite.All`, the same scopes as the PowerShell toolkit.
 
 ## Build and Release
 

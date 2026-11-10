@@ -21,6 +21,38 @@ public sealed class AdControllerDiscoveryTests
     }
 
     [Fact]
+    public void SampleConfigIsDetectedButRealDomainIsNot()
+    {
+        Assert.False(AdControllerDiscovery.IsSamplePlaceholder(Config()));
+        Assert.True(AdControllerDiscovery.IsSamplePlaceholder(new ActiveDirectoryConfig { DomainNetbios = "CONTOSO", PrimaryDomainController = "dc01.contoso.org" }));
+        Assert.True(AdControllerDiscovery.IsSamplePlaceholder(new ActiveDirectoryConfig { DomainNetbios = "REAL", PrimaryDomainController = "dc01.contoso.org" }));
+    }
+
+    [Fact]
+    public void PlaceholderLocalConfigIsReplacedByRealBundledConfigAndBackedUp()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            var local = Path.Combine(dir, "local.json");
+            var bundled = Path.Combine(dir, "bundled.json");
+            File.WriteAllText(local, "{}");
+            File.WriteAllText(bundled, "{\"Settings\":{\"ActiveDirectory\":{\"DomainNetbios\":\"REAL\",\"PrimaryDomainController\":\"dc01.real.org\"}}}");
+            var sample = new ToolConfig { Settings = new SettingsConfig { ActiveDirectory = new ActiveDirectoryConfig { DomainNetbios = "CONTOSO", PrimaryDomainController = "dc01.contoso.org" } } };
+
+            var adopted = ConfigService.TryAdoptBundledConfig(sample, local, bundled);
+
+            Assert.Equal("REAL", adopted?.Settings.ActiveDirectory?.DomainNetbios);
+            Assert.Equal("{}", File.ReadAllText(local + ".bak"));
+            Assert.Contains("dc01.real.org", File.ReadAllText(local));
+            Assert.Null(ConfigService.TryAdoptBundledConfig(adopted!, local, bundled));
+            File.WriteAllText(bundled, "{\"Settings\":{\"ActiveDirectory\":{\"DomainNetbios\":\"CONTOSO\"}}}");
+            Assert.Null(ConfigService.TryAdoptBundledConfig(sample, local, bundled));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public void DnsDomainsComeFromControllerFqdnsAndDomainDns()
     {
         var domains = AdControllerDiscovery.GetDnsDomains(Config());

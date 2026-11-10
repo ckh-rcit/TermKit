@@ -72,7 +72,7 @@ namespace TermKit.Services
         {
             try
             {
-                var addresses = await Dns.GetHostAddressesAsync(controller).WaitAsync(ProbeTimeout);
+                var addresses = await Bounded(Dns.GetHostAddressesAsync(controller), ProbeTimeout);
                 using var cts = new CancellationTokenSource(ProbeTimeout);
                 using var client = new TcpClient();
                 await client.ConnectAsync(addresses, AdwsPort, cts.Token);
@@ -92,6 +92,22 @@ namespace TermKit.Services
             }
         }
 
+        // A task abandoned at the timeout must still have its fault observed, or the finalizer reports it later as a crash.
+        private static Task<T> Bounded<T>(Task<T> task, TimeSpan timeout)
+        {
+            _ = task.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+            return task.WaitAsync(timeout);
+        }
+
+        internal const string SamplePlaceholderMessage =
+            "The Active Directory settings in config.json are still the sample placeholders (contoso). " +
+            "Set Settings.ActiveDirectory to your domain and domain controllers in %LOCALAPPDATA%\\TermKit\\config.json " +
+            "(installed app: %LOCALAPPDATA%\\Packages\\<TermKit package>\\LocalCache\\Local\\TermKit\\config.json), then restart TermKit.";
+
+        internal static bool IsSamplePlaceholder(ActiveDirectoryConfig config) =>
+            string.Equals(config.DomainNetbios?.Trim(), "CONTOSO", StringComparison.OrdinalIgnoreCase) ||
+            BuildCandidates(config).Any(c => c.Contains(".contoso.", StringComparison.OrdinalIgnoreCase));
+
         private static async Task<List<string>> DiscoverViaDnsAsync(IEnumerable<string> domains)
         {
             var found = new List<string>();
@@ -99,7 +115,7 @@ namespace TermKit.Services
             {
                 try
                 {
-                    var names = await Task.Run(() =>
+                    var names = await Bounded(Task.Run(() =>
                     {
                         using var runspace = OnPremAdService.CreateRunspace();
                         using var ps = PowerShell.Create();
@@ -115,7 +131,7 @@ namespace TermKit.Services
                             .Where(n => !string.IsNullOrWhiteSpace(n))
                             .Select(n => n!)
                             .ToList();
-                    }).WaitAsync(SrvTimeout);
+                    }), SrvTimeout);
                     found.AddRange(names);
                 }
                 catch (Exception ex)

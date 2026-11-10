@@ -41,9 +41,17 @@ jobs:
       - name: Regression tests
         run: dotnet test tests/TermKit.Tests/TermKit.Tests.csproj --configuration Release --runtime win-x64
 
-      - name: Create config.json from sample
+      - name: Create config.json from release secret
         shell: pwsh
-        run: Copy-Item "config.sample.json" "config.json"
+        env:
+          TERMKIT_CONFIG_JSON: ${{ secrets.TERMKIT_CONFIG_JSON }}
+          APPINSTALLER_FEED_URL: ${{ vars.APPINSTALLER_FEED_URL }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TERMKIT_CONFIG_JSON)) { throw 'Repository secret TERMKIT_CONFIG_JSON is not set; refusing to ship the sample placeholder configuration.' }
+          $config = $env:TERMKIT_CONFIG_JSON | ConvertFrom-Json
+          if ($config.Settings.ActiveDirectory.DomainNetbios -eq 'CONTOSO' -or $env:TERMKIT_CONFIG_JSON -match '\.contoso\.') { throw 'TERMKIT_CONFIG_JSON still contains sample placeholder values.' }
+          $config.Settings | Add-Member -NotePropertyName UpdateFeedUrl -NotePropertyValue "$env:APPINSTALLER_FEED_URL" -Force
+          $config | ConvertTo-Json -Depth 20 | Set-Content config.json -Encoding utf8
 
       - name: Decode signing certificate
         shell: pwsh

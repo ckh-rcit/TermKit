@@ -265,6 +265,11 @@ namespace TermKit
                 return;
             }
 
+            if (AdControllerDiscovery.IsSamplePlaceholder(adSettings))
+            {
+                throw new InvalidOperationException(AdControllerDiscovery.SamplePlaceholderMessage);
+            }
+
             // One attempt with the saved password per click, never automatically at startup, to avoid account lockouts.
             string? notice = null;
             var hadSavedCredentials = false;

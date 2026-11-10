@@ -205,6 +205,27 @@ namespace TermKit.Services
             return directory;
         }
 
+        // Lets an update replace a config seeded from the sample; the previous file is kept as config.json.bak.
+        internal static ToolConfig? TryAdoptBundledConfig(ToolConfig local, string configPath, string bundledPath)
+        {
+            if (local.Settings?.ActiveDirectory is not { } localAd || !AdControllerDiscovery.IsSamplePlaceholder(localAd)) return null;
+            try
+            {
+                if (!File.Exists(bundledPath)) return null;
+                var bundledJson = File.ReadAllText(bundledPath);
+                var bundled = JsonSerializer.Deserialize<ToolConfig>(bundledJson);
+                if (bundled?.Settings?.ActiveDirectory is not { } bundledAd || AdControllerDiscovery.IsSamplePlaceholder(bundledAd)) return null;
+                File.Copy(configPath, configPath + ".bak", true);
+                File.WriteAllText(configPath, bundledJson);
+                Logger.Log("Replaced the sample placeholder config.json with the configuration shipped in this version. The previous file is config.json.bak.", LogType.Warning);
+                return bundled;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+            {
+                return null;
+            }
+        }
+
         public static ToolConfig Load(string? configDirectory = null)
         {
             var directory = configDirectory ?? GetWritableConfigDirectory();
@@ -242,6 +263,10 @@ namespace TermKit.Services
                 throw new InvalidOperationException("Failed to load 'config.json': file is empty or invalid.");
             }
 
+            if (configDirectory == null)
+            {
+                config = TryAdoptBundledConfig(config, configPath, Path.Combine(AppContext.BaseDirectory, "config.json")) ?? config;
+            }
             // Backfill retention fields from the bundled config when users already have an older
             // local config.json created before the TermKit retention workflow existed.
             try
