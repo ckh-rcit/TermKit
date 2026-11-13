@@ -14,7 +14,7 @@
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.6" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.13" />
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.89.0" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.92.0" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Azure.Security.KeyVault.Secrets" Version="4.11.1" />
     <Compile Include="..\..\Services\ServiceNowService.cs" Link="Services\ServiceNowService.cs" />
