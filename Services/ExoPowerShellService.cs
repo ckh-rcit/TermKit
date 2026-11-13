@@ -1207,6 +1207,14 @@ namespace TermKit.Services
             _runspace.ApartmentState = ApartmentState.STA;
             _runspace.ThreadOptions = PSThreadOptions.UseCurrentThread;
             _runspace.Open();
+
+            // Clearing Types drops BaseName on file objects, which PowerShellGet 2.2.6+ reads while importing.
+            using var ps = PowerShell.Create();
+            ps.Runspace = _runspace;
+            ps.AddScript(
+                "Update-TypeData -TypeName System.IO.FileInfo -MemberType ScriptProperty -MemberName BaseName -Value { [System.IO.Path]::GetFileNameWithoutExtension($this.Name) } -Force;" +
+                "Update-TypeData -TypeName System.IO.DirectoryInfo -MemberType ScriptProperty -MemberName BaseName -Value { $this.Name } -Force");
+            ps.Invoke();
         }
 
         private void EnsureConsoleAllocated()
