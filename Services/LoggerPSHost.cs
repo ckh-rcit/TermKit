@@ -23,6 +23,25 @@ namespace TermKit.Services
         public override PSHostUserInterface UI => _ui;
         public override Version Version => new(1, 0, 0);
 
+        public static System.Management.Automation.Runspaces.InitialSessionState CreateInitialSessionState()
+        {
+            var state = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault2();
+            state.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.RemoteSigned;
+            state.Formats.Clear();
+            state.Types.Clear();
+            // Clearing Types drops BaseName on file objects, which PowerShellGet 2.2.6+ reads while importing.
+            state.Types.Add(new System.Management.Automation.Runspaces.SessionStateTypeEntry(BaseNameTypeData(typeof(System.IO.FileInfo), "[System.IO.Path]::GetFileNameWithoutExtension($this.Name)"), false));
+            state.Types.Add(new System.Management.Automation.Runspaces.SessionStateTypeEntry(BaseNameTypeData(typeof(System.IO.DirectoryInfo), "$this.Name"), false));
+            return state;
+        }
+
+        private static System.Management.Automation.Runspaces.TypeData BaseNameTypeData(Type type, string getter)
+        {
+            var data = new System.Management.Automation.Runspaces.TypeData(type);
+            data.Members.Add("BaseName", new System.Management.Automation.Runspaces.ScriptPropertyData("BaseName", ScriptBlock.Create(getter)));
+            return data;
+        }
+
         public override void EnterNestedPrompt() { }
         public override void ExitNestedPrompt() { }
         public override void NotifyBeginApplication() { }

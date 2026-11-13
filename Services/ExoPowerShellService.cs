@@ -1197,24 +1197,12 @@ namespace TermKit.Services
             // Clearing the Formats/Types entries before opening the runspace skips that file loading
             // entirely while keeping the core cmdlets; ExchangeOnlineManagement loads its own formatting
             // data when imported, so the default set isn't needed here.
-            var iss = InitialSessionState.CreateDefault2();
-            iss.Formats.Clear();
-            iss.Types.Clear();
-
-            iss.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.RemoteSigned;
+            var iss = LoggerPSHost.CreateInitialSessionState();
 
             _runspace = RunspaceFactory.CreateRunspace(new LoggerPSHost(), iss);
             _runspace.ApartmentState = ApartmentState.STA;
             _runspace.ThreadOptions = PSThreadOptions.UseCurrentThread;
             _runspace.Open();
-
-            // Clearing Types drops BaseName on file objects, which PowerShellGet 2.2.6+ reads while importing.
-            using var ps = PowerShell.Create();
-            ps.Runspace = _runspace;
-            ps.AddScript(
-                "Update-TypeData -TypeName System.IO.FileInfo -MemberType ScriptProperty -MemberName BaseName -Value { [System.IO.Path]::GetFileNameWithoutExtension($this.Name) } -Force;" +
-                "Update-TypeData -TypeName System.IO.DirectoryInfo -MemberType ScriptProperty -MemberName BaseName -Value { $this.Name } -Force");
-            ps.Invoke();
         }
 
         private void EnsureConsoleAllocated()

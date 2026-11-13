@@ -389,10 +389,7 @@ namespace TermKit.Services
 
         internal static System.Management.Automation.Runspaces.Runspace CreateRunspace()
         {
-            var state = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault2();
-            state.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.RemoteSigned;
-            state.Formats.Clear();
-            state.Types.Clear();
+            var state = LoggerPSHost.CreateInitialSessionState();
             var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(new LoggerPSHost(), state);
             try
             {
